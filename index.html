@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Basey</title>
+<!-- FUERA DE LOS BUSCADORES, Y ESTA ETIQUETA ES LO QUE DE VERDAD LO HACE.
+     Un nombre de repo discreto no impide que Google indexe el dominio: llega
+     por cualquier enlace. `noindex` se lo dice al buscador en la propia
+     pagina, y `robots.txt` se lo dice antes de entrar. Hacen falta las dos,
+     porque un rastreador que llega por un enlace externo puede no haber
+     mirado el robots.txt.
+     Es una herramienta privada que mueve dinero de verdad: no hay nada que
+     ganar saliendo en las busquedas. -->
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<meta name="googlebot" content="noindex, nofollow">
+<!-- Sin `description` a proposito: es lo que un buscador enseña bajo el
+     titulo, y aqui no queremos ni titulo ni resumen. -->
+<link rel="stylesheet" href="style.css?v=20">
+</head>
+<body>
+
+<!-- ===========================================================================
+     UNA CORTINA, NO UNA CERRADURA.
+
+     Esto corre en el navegador, asi que la contrasena esta ahi abajo en texto
+     plano y cualquiera que abra el fuente la ve. No protege nada: solo evita
+     que alguien entre por casualidad mientras la pagina esta a medias.
+
+     No se pone `hidden` en el <main> por CSS y ya: el HTML entero se envia
+     igual y se lee en el fuente. Lo unico que esto esconde es la PANTALLA.
+     Si algun dia hace falta de verdad, es una funcion en el servidor.
+     =========================================================================== -->
+<div id="gate">
+  <form id="gateForm">
+    <span class="mark"></span>
+    <h1>Arc Launcher</h1>
+    <p>Todavia no es publico.</p>
+    <input id="gatePass" type="password" placeholder="Contrasena" autocomplete="current-password" autofocus>
+    <button class="btn btn-primary" type="submit">Entrar</button>
+    <small id="gateMsg"></small>
+  </form>
+</div>
+<script>
+(function () {
+  var CLAVE = "penny2026";              // cambiala aqui y vuelve a desplegar
+  var RECUERDO = "arcLauncher.gate";
+  var puerta = document.getElementById("gate");
+  function abrir() {
+    puerta.remove();
+    document.body.classList.remove("locked");
+  }
+  try { if (localStorage.getItem(RECUERDO) === CLAVE) { abrir(); return; } } catch (e) {}
+  document.body.classList.add("locked");
+  document.getElementById("gateForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var v = document.getElementById("gatePass").value;
+    if (v === CLAVE) {
+      try { localStorage.setItem(RECUERDO, CLAVE); } catch (e2) {}
+      abrir();
+    } else {
+      document.getElementById("gateMsg").textContent = "No es esa.";
+    }
+  });
+})();
+</script>
+
+
+<header class="top">
+  <div class="brand">
+    <span class="mark"></span>
+    <span>Arc Launcher</span>
+    <span class="chip" id="chainChip">Arc · 5042</span>
+    <!-- La rapida, siempre a la vista: es con la que se opera, asi que
+         su saldo no puede estar escondido en una pestana. -->
+    <span class="chip" id="fastChip" hidden></span>
+  </div>
+  <button id="connectBtn" class="btn btn-primary">Connect wallet</button>
+</header>
+
+<nav class="steps" id="steps">
+  <button class="step is-active" data-step="1"><b>1</b> Token</button>
+  <button class="step" data-step="2"><b>2</b> Pool</button>
+  <button class="step" data-step="3"><b>3</b> Liquidity</button>
+  <button class="step" data-step="4"><b>4</b> Your tokens</button>
+  <button class="step" data-step="5"><b>5</b> Your liquidity</button>
+  <button class="step step-wide" data-step="6"><b>6</b> Launch &amp; manage</button>
+  <button class="step" data-step="7"><b>7</b> Wallets</button>
+</nav>
+
+<main>
+
+<!-- ───────────────────────── 1 · TOKEN ───────────────────────── -->
+<section class="panel" data-panel="1">
+  <div class="cols">
+    <div class="col-form">
+      <h2>The basics</h2>
+      <p class="lede">Written into the contract when you deploy it.</p>
+
+      <div class="grid2">
+        <label class="field"><span>Name</span><input id="fName" type="text" value="My Token" maxlength="64" autocomplete="off"></label>
+        <label class="field"><span>Symbol</span><input id="fSymbol" type="text" value="MTK" maxlength="16" autocomplete="off"></label>
+        <label class="field">
+          <span>Total supply</span>
+          <input id="fSupply" type="text" inputmode="numeric" value="1000000000">
+          <div class="chips" id="supplyChips"></div>
+        </label>
+        <label class="field"><span>Decimals</span><input id="fDecimals" type="number" min="0" max="18" value="18"><small>18 is standard. Below 6 breaks most price displays.</small></label>
+      </div>
+
+      <h2>Identity</h2>
+      <p class="lede">
+        An ERC-20 has no picture. What it can have is a
+        <code>metadataURI()</code> that indexers read — the same getter this
+        chain's other launchpads already expose, so filling this in is what makes
+        your token show up with a face instead of a blank circle.
+      </p>
+
+      <div class="field">
+        <span>Where the metadata lives</span>
+        <div class="rangeList" id="metaModes"></div>
+      </div>
+
+      <div id="metaInlineFields">
+        <div class="grid2">
+          <label class="field">
+            <span>Image URL</span>
+            <input id="mImage" type="text" placeholder="https://… or ipfs://…" autocomplete="off">
+            <small>A square PNG works everywhere. IPFS survives you; a personal server does not.</small>
+          </label>
+          <label class="field">
+            <span>Website</span>
+            <input id="mWebsite" type="text" placeholder="https://…" autocomplete="off">
+          </label>
+          <label class="field">
+            <span>X / Twitter</span>
+            <input id="mTwitter" type="text" placeholder="https://x.com/…" autocomplete="off">
+          </label>
+          <label class="field">
+            <span>Telegram</span>
+            <input id="mTelegram" type="text" placeholder="https://t.me/…" autocomplete="off">
+          </label>
+        </div>
+        <label class="field">
+          <span>Description</span>
+          <input id="mDescription" type="text" maxlength="300" placeholder="One sentence." autocomplete="off">
+        </label>
+      </div>
+
+      <label class="field" id="metaUriField" hidden>
+        <span>Metadata URI</span>
+        <input id="mUri" type="text" placeholder="ipfs://…" autocomplete="off">
+        <small>Must resolve to JSON with an <code>image</code> field. Nothing here checks that it does.</small>
+      </label>
+
+      <label class="radio" id="metaMutableRow">
+        <input type="checkbox" id="mMutable">
+        <span>
+          <b>Let me change it later</b> — adds <code>setMetadataURI()</code>, an
+          owner-only function.
+          <em>Useful when a link breaks. It also means you can swap the picture and the description for anything, at any time, and a buyer has to trust you not to.</em>
+        </span>
+      </label>
+
+      <div class="metaPreview" id="metaPreview"></div>
+
+      <h2>Functions</h2>
+      <p class="lede">
+        Every switch is a real power written into your contract. Open one to see
+        what it does, why you might want it, and what it costs whoever buys from
+        you. Nothing here is blocked — including the things that will obviously
+        break your token, because breaking it on purpose is a legitimate reason
+        to be here.
+      </p>
+
+      <div id="featureList" class="features"></div>
+
+      <h2>Ownership</h2>
+      <div id="ownershipBox" class="ownership"></div>
+    </div>
+
+    <div class="col-side">
+      <div class="verdict" id="verdict" data-level="safe">
+        <div class="verdict-head" id="verdictHead"></div>
+        <div class="verdict-detail" id="verdictDetail"></div>
+        <ul class="verdict-powers" id="verdictPowers" hidden></ul>
+      </div>
+
+      <div class="conflicts" id="conflicts" hidden>
+        <div class="conflicts-title">What this will actually do</div>
+      </div>
+
+      <div class="sourceBox">
+        <div class="sourceHead">
+          <span id="sourceTitle">Contract source</span>
+          <div class="sourceActions">
+            <button class="btn btn-ghost btn-sm" id="editSourceBtn">Edit freely</button>
+            <button class="btn btn-ghost btn-sm" id="copySourceBtn">Copy</button>
+          </div>
+        </div>
+        <textarea id="sourceView" spellcheck="false" readonly></textarea>
+        <p class="sourceNote" id="sourceNote">
+          Generated from the switches. No imports, nothing hidden — this is the
+          whole thing. Edit it, paste your own, or take it and deploy it
+          somewhere else entirely.
+        </p>
+      </div>
+
+      <button id="deployBtn" class="btn btn-primary btn-big">Compile &amp; deploy</button>
+      <div class="log" id="deployLog" hidden></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 2 · POOL ───────────────────────── -->
+<section class="panel" data-panel="2" hidden>
+  <div class="cols">
+    <div class="col-form">
+      <h2>Create a pool</h2>
+      <p class="lede">
+        Any two tokens on Arc, at any starting price. It does not have to be
+        yours, and it does not have to make sense.
+      </p>
+
+      <div class="field">
+        <span>Which Uniswap</span>
+        <div class="rangeList" id="versionPick"></div>
+      </div>
+
+      <div class="grid2">
+        <label class="field">
+          <span>Token A</span>
+          <input id="poolTokenA" type="text" placeholder="0x…" autocomplete="off">
+          <small id="poolTokenAInfo"></small>
+        </label>
+        <label class="field">
+          <span>Token B</span>
+          <input id="poolTokenB" type="text" autocomplete="off">
+          <small id="poolTokenBInfo"></small>
+        </label>
+      </div>
+      <p class="hintRow">
+        <button class="linkBtn" id="useUsdcBtn">Use USDC as token B</button>
+        <span>— 403 of the last 404 pools on Arc did. It is also the gas token.</span>
+      </p>
+
+      <div class="field">
+        <span>Fee tier</span>
+        <div class="tiers" id="feeTiers"></div>
+        <small>Only these four exist on this factory. 0.25% is not enabled, and only the factory owner could add one.</small>
+      </div>
+
+      <label class="field" id="hooksField" hidden>
+        <span>Hook contract</span>
+        <input id="poolHooks" type="text" value="0x0000000000000000000000000000000000000000" autocomplete="off">
+        <small id="hooksNote"></small>
+      </label>
+
+      <label class="field">
+        <span>Starting price</span>
+        <div class="priceRow">
+          <input id="poolPrice" type="text" inputmode="decimal" value="0.000005">
+          <span class="unit" id="priceUnit">B per A</span>
+        </div>
+        <small id="poolPriceInfo"></small>
+      </label>
+
+      <button id="createPoolBtn" class="btn btn-primary btn-big">Create pool</button>
+      <div class="log" id="poolLog" hidden></div>
+    </div>
+    <div class="col-side">
+      <div class="note">
+        <h3>What actually happens</h3>
+        <p>
+          One call to <code>createAndInitializePoolIfNecessary</code>. It deploys
+          the pool contract if that exact pair and fee has none, and writes the
+          opening price. If the pool already exists it does nothing and costs
+          almost nothing — you cannot overwrite someone else's price.
+        </p>
+        <h3>The order of the pair is not yours to choose</h3>
+        <p>
+          Uniswap sorts the two addresses and calls the smaller one
+          <code>token0</code>. Arc's USDC starts with <code>0x36</code>, so about
+          one token in five sorts below it and the pair flips. The page computes
+          it and tells you which way round yours landed.
+        </p>
+        <h3>Never the native path</h3>
+        <p>
+          The position manager here reports a <code>WETH9()</code> that does not
+          answer <code>name()</code> — a dead address inherited from the fork it
+          came from. Everything is done with plain ERC-20 approvals instead.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 3 · LIQUIDITY ───────────────────────── -->
+<section class="panel" data-panel="3" hidden>
+  <div class="cols">
+    <div class="col-form">
+      <h2>Add liquidity</h2>
+      <p class="lede">
+        Where you put the range matters more than how much you put in. Pick one
+        and it will tell you what you just built.
+      </p>
+
+      <div class="field">
+        <span>Shape</span>
+        <div id="rangePresets" class="rangeList"></div>
+      </div>
+
+      <div class="grid2" id="bandRow" hidden>
+        <label class="field"><span>Min price</span><input id="rangeMin" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Max price</span><input id="rangeMax" type="text" inputmode="decimal"></label>
+      </div>
+      <div class="grid2" id="tickRow" hidden>
+        <label class="field"><span>Tick lower</span><input id="tickLower" type="text" inputmode="numeric"></label>
+        <label class="field"><span>Tick upper</span><input id="tickUpper" type="text" inputmode="numeric"></label>
+      </div>
+
+      <div class="rangeOut" id="rangeOut"></div>
+
+      <div class="grid2">
+        <label class="field">
+          <span id="liqALabel">Token A amount</span>
+          <div class="priceRow"><input id="liqA" type="text" inputmode="decimal" placeholder="0.0"><button class="btn btn-ghost btn-sm" id="liqAMax">Max</button></div>
+          <small id="liqABal"></small>
+        </label>
+        <label class="field">
+          <span id="liqBLabel">Token B amount</span>
+          <div class="priceRow"><input id="liqB" type="text" inputmode="decimal" placeholder="0.0"><button class="btn btn-ghost btn-sm" id="liqBMax">Max</button></div>
+          <small id="liqBBal"></small>
+        </label>
+      </div>
+
+      <button id="addLiqBtn" class="btn btn-primary btn-big">Approve &amp; add liquidity</button>
+      <div class="log" id="liqLog" hidden></div>
+    </div>
+    <div class="col-side">
+      <div class="note">
+        <h3>Two approvals, then a mint</h3>
+        <p>
+          The position manager moves both tokens, so each needs an allowance.
+          This asks for exactly the amount you typed, never unlimited.
+        </p>
+        <h3>You may not spend what you typed</h3>
+        <p>
+          At a given price and range the pool decides the ratio it can accept.
+          Whatever it cannot use stays in your wallet. The amounts are a ceiling,
+          not a promise — which is also why a one-sided range only needs one
+          token: the other side has nothing to do.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 4 · YOUR TOKENS ───────────────────────── -->
+<section class="panel" data-panel="4" hidden>
+  <div class="cols">
+    <div class="col-form">
+      <h2>Your tokens</h2>
+      <p class="lede">
+        Tokens you deployed here, plus anything else you want to look at. Open
+        one and it reads the deployed bytecode to find which functions really
+        exist — not what the source claimed, what is actually on chain.
+      </p>
+
+      <label class="field">
+        <span>Inspect any token</span>
+        <div class="priceRow">
+          <input id="inspectAddr" type="text" placeholder="0x…" autocomplete="off">
+          <button class="btn btn-sm" id="inspectBtn">Open</button>
+        </div>
+        <small>Works on any ERC-20 on Arc, whoever made it.</small>
+      </label>
+
+      <div id="tokenList" class="positions"></div>
+    </div>
+    <div class="col-side">
+      <div class="note">
+        <h3>How the scan works</h3>
+        <p>
+          Every function has a 4-byte selector, and a contract that implements
+          one has those bytes in its code. The page hashes a list of known
+          signatures and searches the deployed bytecode for each. A match is
+          strong evidence the function is there; an absence is near-proof it is
+          not.
+        </p>
+        <h3>It reads state, not promises</h3>
+        <p>
+          Where a power exists, its current setting is read straight from the
+          contract — who the owner is, whether it is paused, whether trading was
+          ever switched on. That is the difference between what a token says and
+          what it does.
+        </p>
+        <h3>The list is local</h3>
+        <p>
+          Tokens you deploy are remembered in this browser only. Nothing is sent
+          anywhere, and clearing site data clears the list — the tokens
+          themselves are on chain and unaffected.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 5 · YOUR LIQUIDITY ───────────────────────── -->
+<section class="panel" data-panel="5" hidden>
+  <div class="cols">
+    <div class="col-form">
+      <h2>Your liquidity</h2>
+      <p class="lede">Every position this wallet holds, with what it is worth doing to it.</p>
+      <div id="positions" class="positions">
+        <p class="empty">Connect a wallet to see your positions.</p>
+      </div>
+      <button id="refreshPos" class="btn btn-ghost">Refresh</button>
+    </div>
+    <div class="col-side">
+      <div class="note">
+        <h3>Add more</h3>
+        <p>Puts more into the same range, on the same NFT. The range itself cannot be moved — a different range is a different position.</p>
+        <h3>Lock with a deadline</h3>
+        <p>Compiles a locker in your browser, deploys it from your wallet, and sends the position into it. You keep collecting fees the whole time. Only time can release it, and the contract has no admin.</p>
+        <h3>Burn permanently</h3>
+        <p>Sends the position to a dead address. The liquidity can never be withdrawn by anyone, ever, and neither can the fees it earns from then on.</p>
+        <h3>Withdraw</h3>
+        <p>Pulls the liquidity out and collects what is owed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 6 · LAUNCH & MANAGE ───────────────────────── -->
+<section class="panel" data-panel="6" hidden>
+
+  <div class="subtabs" id="subtabs">
+    <button class="subtab is-active" data-sub="launch">Launch a token</button>
+    <button class="subtab" data-sub="manage">What you launched</button>
+  </div>
+
+  <!-- ── 6a · lanzar ── -->
+  <div data-subpanel="launch">
+    <div class="cols">
+      <div class="col-form">
+
+        <h2>Which token</h2>
+        <div class="rangeList" id="pModo"></div>
+        <label class="field" id="pExistingBox" hidden>
+          <span>Token address</span>
+          <input id="pExisting" type="text" placeholder="0x…" autocomplete="off">
+          <small id="pExistingInfo">Its supply, symbol and decimals are read from the chain — nothing is typed.</small>
+        </label>
+
+        <h2 id="identityH">Identity</h2>
+        <div class="grid2">
+          <label class="field"><span>Name</span><input id="pName" type="text" value="My Token" maxlength="64"></label>
+          <label class="field"><span>Symbol</span><input id="pSym" type="text" value="MTK" maxlength="16"></label>
+        </div>
+        <div class="grid2">
+          <label class="field"><span>Image URL</span><input id="pImage" type="text" placeholder="https://… or ipfs://…"><small>A GIF works. It is a link in your contract — nothing is uploaded here.</small></label>
+          <label class="field"><span>Website</span><input id="pWeb" type="text" placeholder="https://…"></label>
+          <label class="field"><span>X / Twitter</span><input id="pTw" type="text" placeholder="https://x.com/…"></label>
+          <label class="field"><span>Telegram</span><input id="pTg" type="text" placeholder="https://t.me/…"></label>
+        </div>
+        <label class="field"><span>Description</span><input id="pDesc" type="text" maxlength="300" placeholder="One sentence."></label>
+        <label class="radio">
+          <input type="checkbox" id="pEditable" checked>
+          <span><b>Let me change the identity later</b> — adds <code>setMetadataURI()</code>. It is the only owner power the contract will have, and you can renounce once you no longer need it.</span>
+        </label>
+
+        <h2 id="sizeH">Size</h2>
+        <div class="grid2">
+          <label class="field">
+            <span>Total supply</span>
+            <input id="pSupply" type="text" inputmode="numeric" value="420690000000000">
+            <div class="chips" id="pSupplyChips"></div>
+          </label>
+          <label class="field">
+            <span>Opening market cap</span>
+            <div class="priceRow"><span class="unit">$</span><input id="pMcap" type="text" inputmode="numeric" value="5000"></div>
+            <small id="pPriceOut"></small>
+          </label>
+        </div>
+
+        <h2>Sell walls</h2>
+        <p class="lede">
+          Each one holds only your token and needs no USDC. The price rises
+          through them and they sell for you, at prices published on chain
+          before anyone buys.
+        </p>
+        <div id="pStages"></div>
+
+        <h2>Floor</h2>
+        <div class="grid2">
+          <label class="field">
+            <span>USDC in the floor</span>
+            <div class="priceRow"><span class="unit">$</span><input id="pFloor" type="text" inputmode="decimal" value="2"></div>
+            <small>The only money you put in. It is what lets a buyer sell back.</small>
+          </label>
+          <label class="field">
+            <span>Treasury kept in your wallet</span>
+            <div class="priceRow"><input id="pTreasury" type="text" inputmode="numeric" value="15"><span class="unit">%</span></div>
+            <small>Sold into the pool for expenses — never withdrawn as liquidity.</small>
+          </label>
+        </div>
+
+        <div class="field" id="leftoverBox">
+          <span>What happens to whatever is left over</span>
+          <div class="rangeList" id="pLeftover"></div>
+        </div>
+
+        <div class="conflicts" id="pWarn" hidden></div>
+        <div id="pTable"></div>
+
+        <button id="pRun" class="btn btn-primary btn-big">Run the plan</button>
+        <p class="hintRow"><span id="pCost"></span></p>
+        <div class="log" id="pLog" hidden></div>
+      </div>
+
+      <div class="col-side">
+        <div class="note">
+          <h3>The price is computed, never typed</h3>
+          <p>You choose the market cap and the supply; the opening price falls out of them. Pick a billion or a quadrillion and it still opens at the same market cap — all that changes is how many zeros the price has.</p>
+          <h3>What you will sign</h3>
+          <p id="pSteps">One transaction per row, in order. It stops at the first failure rather than carrying on.</p>
+          <h3>The one thing to watch</h3>
+          <p>Every sell wall should ask for tokens and no USDC. If one asks for USDC its range landed on the wrong side of the price — stop instead of signing.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 6b · lo lanzado ── -->
+  <div data-subpanel="manage" hidden>
+    <div class="cols">
+      <div class="col-form">
+        <h2>What you launched</h2>
+        <p class="lede">Your tokens and the positions behind them, with everything you can do to them from here.</p>
+        <div id="mineList" class="positions"></div>
+        <button id="mineRefresh" class="btn btn-ghost">Refresh</button>
+      </div>
+      <div class="col-side">
+        <div class="note">
+          <h3>Collect fees</h3>
+          <p>Trading fees accrue separately from the money you put in, so collecting them never touches your liquidity — and it works even while a position is locked.</p>
+          <h3>Add or withdraw</h3>
+          <p>Adding puts more into the same range on the same NFT. Withdrawing pulls the liquidity out and collects what is owed. A locked position can do neither until its date.</p>
+          <h3>Withdrawing is not free</h3>
+          <p>The USDC sitting in a position is what a buyer sells back into. Taking it out is the same act as removing the exit, whatever the intention — selling treasury tokens raises money without closing that door.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="panel" data-panel="7" hidden>
+
+  <h2>Your fast wallet</h2>
+  <p class="lede">
+    Everything on this site is signed by a <b>fast wallet</b> derived from one
+    signature of yours. That is why nothing here opens a wallet popup: the key
+    is yours and it is in this page. Your main wallet signs exactly one thing
+    &mdash; putting money in.
+  </p>
+
+  <div class="plan" id="fastCards"></div>
+
+  <div class="grid2">
+    <label class="field">
+      <span>Move USDC from your main wallet into it</span>
+      <div class="priceRow"><span class="unit">$</span><input id="fwFund" type="text" inputmode="decimal" value="5"></div>
+      <small>One popup. On Arc the gas token is USDC, so this is the fuel and the money at once.</small>
+    </label>
+    <label class="field">
+      <span>&nbsp;</span>
+      <button id="fwFundBtn" class="btn btn-primary">Fund the fast wallet</button>
+      <small id="fwFundNote"></small>
+    </label>
+  </div>
+
+  <div class="grid2">
+    <label class="field">
+      <span>Take some back to your main wallet</span>
+      <div class="priceRow"><span class="unit">$</span><input id="fwOut" type="text" inputmode="decimal" value="1"></div>
+      <small id="fwOutNote">No popup &mdash; the fast wallet signs its own withdrawal.</small>
+    </label>
+    <label class="field">
+      <span>&nbsp;</span>
+      <div class="chips">
+        <button id="fwOutBtn" class="btn">Send it to main</button>
+        <button id="fwOutMax" class="btn btn-sm">Max</button>
+      </div>
+      <small>Max leaves the gas behind &mdash; a wallet with nothing cannot sign its way out.</small>
+    </label>
+  </div>
+
+  <h2>The cluster</h2>
+  <p class="lede">
+    Wallets derived from the fast one, so a single signature brings the whole
+    set back on any machine. They are ordinary addresses: no sign-up, no fee,
+    no limit. They sign locally, so moving between them opens nothing.
+  </p>
+
+  <div class="grid2">
+    <label class="field">
+      <span>Add wallets</span>
+      <div class="chips">
+        <button id="fwAdd" class="btn btn-primary">Add a wallet</button>
+        <button id="fwDrop" class="btn btn-sm">Remove the last one</button>
+      </div>
+      <small id="fwCountNote">One per click. They are derived in order, so #3 is
+      always #3 &mdash; removing one and adding it back gives back the same wallet,
+      with whatever is in it. Removing hides it from this list; it does not
+      destroy anything, and one with money in it will not be hidden.</small>
+    </label>
+    <label class="field">
+      <span>Spread the amounts by</span>
+      <div class="priceRow"><input id="fwVary" type="text" inputmode="numeric" value="0"><span class="unit">%</span></div>
+      <small>
+        0 splits it evenly. Worth knowing what this is for: splitting your own
+        order so it is not read ahead of you is execution. Making ten buys of
+        yours look like ten buyers is a different thing, and the chain shows
+        them one hop from a common funder either way.
+      </small>
+    </label>
+  </div>
+
+  <div class="grid2">
+    <label class="field">
+      <span>USDC to each ticked wallet</span>
+      <div class="priceRow"><span class="unit">$</span><input id="fwSpread" type="text" inputmode="decimal" value="1"></div>
+      <small id="fwSpreadNote">Each ticked wallet gets this much. Tick two and put 2,
+      and each gets $2 &mdash; $4 leaves the fast wallet.</small>
+    </label>
+    <label class="field">
+      <span>&nbsp;</span>
+      <button id="fwSpreadBtn" class="btn">Send it to each</button>
+      <small>One transaction, through a Disperse contract compiled here. No popup: the fast wallet signs.</small>
+    </label>
+  </div>
+
+  <div class="wrefresh">
+    <button id="fwRefresh" class="btn btn-sm">↻ Refresh balances and price</button>
+    <button id="fwCost" class="btn btn-sm">Read what I paid, from the chain</button>
+    <button id="fwFind" class="btn btn-sm">Find what these wallets hold</button>
+    <small id="fwRefreshNote">Nothing here polls on its own &mdash; Arc's nodes are down
+    for a good part of the day and a page that keeps asking is a page that keeps failing.</small>
+  </div>
+  <div class="wtotal" id="fwTotal" hidden></div>
+  <div class="wgrid" id="fwList"></div>
+
+  <div class="grid2">
+    <label class="field">
+      <span>&nbsp;</span>
+      <button id="fwSweepFast" class="btn">Bring everything to the fast wallet</button>
+      <small>Each one keeps its gas back, or it could never send again.</small>
+    </label>
+    <label class="field">
+      <span>&nbsp;</span>
+      <button id="fwSweepMain" class="btn">Bring everything to my main wallet</button>
+      <small>The cold one. This is the way out.</small>
+    </label>
+  </div>
+
+  <div class="log" id="fwLog" hidden></div>
+
+  <h2>Buy and sell with them</h2>
+  <p class="lede">
+    Paste an address and pick who buys. Each wallet is quoted <b>fresh, right
+    before its own trade</b> &mdash; they hit the same pool one after another, so
+    the second one gets a worse price than the first and a quote taken up front
+    would be a lie by the time it was used.
+  </p>
+
+  <label class="field">
+    <span>Token address</span>
+    <input id="trToken" type="text" placeholder="0x… or a symbol you have used before"
+           list="trSaved" autocomplete="off">
+    <datalist id="trSaved"></datalist>
+    <small id="trInfo">Its symbol, decimals and pool are read from the chain.
+    Coins you have traded here come back in the list &mdash; type a few letters of
+    the symbol instead of pasting the address again.</small>
+  </label>
+
+  <div class="grid2">
+    <label class="field">
+      <span>Seconds between each wallet</span>
+      <input id="trGap" type="text" inputmode="numeric" value="3">
+      <small>0 fires them as fast as the chain accepts. Arc makes a block every 0.5 s.</small>
+    </label>
+    <label class="field">
+      <span>Type here, then press Apply &mdash; it writes into every card above</span>
+      <div class="priceRow">
+        <span class="unit">$</span><input id="trAllAmt" type="text" inputmode="decimal" value="0.5">
+        <input id="trAllSlip" type="text" inputmode="decimal" value="5"><span class="unit">%</span>
+      </div>
+      <div class="chips">
+        <button id="trFill" class="btn btn-sm">Apply to every card</button>
+        <button id="trAll" class="btn btn-sm">Select all</button>
+        <button id="trNone" class="btn btn-sm">Select none</button>
+      </div>
+    </label>
+  </div>
+
+  <div class="chips" style="margin-bottom:12px">
+    <button id="trFundAll" class="btn btn-sm">Fund every selected one</button>
+    <button id="trBackAll" class="btn btn-sm">Send every one back to the fast wallet</button>
+  </div>
+
+  <!-- LO QUE VA A PASAR, ESCRITO ANTES DE PULSAR.
+       Los importes viven en las tarjetas, que estan mas arriba y fuera de la
+       vista desde aqui: sin esta linea hay que subir a comprobarlos y bajar a
+       pulsar, y eso es exactamente cuando se firma otra cosa de la que se
+       creia. -->
+  <p class="lede" id="trPlan" style="margin-bottom:10px"></p>
+
+  <div class="chips">
+    <button id="trBuy" class="btn btn-primary">Buy with the selected wallets</button>
+    <button id="trSell" class="btn">Sell everything they hold</button>
+  </div>
+
+  <div class="log" id="trLog" hidden></div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <span>
+    Free, and it takes no cut of anything. Every transaction is signed by your
+    own wallet; this page holds no keys and has no contract of its own in the
+    way. Everything it does, you can do without it.
+  </span>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js"></script>
+
+
+
+<script type="module" src="app.js?v=42"></script>
+</body>
+</html>

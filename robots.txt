@@ -1,0 +1,12 @@
+# Fuera de los buscadores, a proposito.
+#
+# Esta es una herramienta privada: la usan dos personas y opera con dinero de
+# verdad. No hay nada que ganar apareciendo en Google y si algo que perder --
+# cuanta menos gente la encuentre, menos superficie hay que vigilar.
+#
+# Y OJO: EL NOMBRE DEL REPO NO PROTEGE NADA. Un nombre discreto no impide que
+# Google indexe el dominio; lo impide ESTO mas la etiqueta `noindex` que lleva
+# el <head> de index.html. Las dos, porque un buscador puede llegar por un
+# enlace sin pasar por robots.txt.
+User-agent: *
+Disallow: /
