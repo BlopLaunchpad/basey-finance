@@ -82,6 +82,36 @@ let firmantePrincipal = null, cuentaPrincipal = null;
 let rápida = null, claveMadre = null, clúster = [];
 let provRPC = null;
 
+/* ── LA RÁPIDA PRINCIPAL TAMBIÉN OPERA, Y VA LA PRIMERA DE LA LISTA ──────
+ *
+ * Hasta el 8-sep-2026 la rápida sólo repartía y recogía: las que compraban y
+ * vendían eran las hijas #0, #1, #2… Pero la rápida es una cartera igual que
+ * las demás, con su saldo y su dirección, y no poder comprar con ella obligaba
+ * a mandarse el dinero a una hija para hacer lo que ya podías hacer allí.
+ *
+ * Se le da el índice -1 EN VEZ de meterla dentro de `clúster`, y la diferencia
+ * importa: `clúster` es la lista de hijas derivadas por índice, y su longitud
+ * es lo que se guarda, lo que se añade y quita, y lo que decide qué dirección
+ * es la #3. Meterla dentro habría corrido todos los índices en uno y las
+ * carteras de todo el mundo habrían cambiado de nombre — con el dinero en la
+ * de antes.
+ *
+ * Con -1 el clúster no se entera de nada: es sólo una fila más en la pantalla.
+ *
+ * DÓNDE **NO** ENTRA, y son tres sitios donde mandarse dinero a uno mismo:
+ *   - el reparto (`Disperse`), que sale de ella;
+ *   - "financiar", que es ella quien paga;
+ *   - "devolver a la rápida", que es ella quien recibe.
+ * Los tres la filtran a propósito. */
+const IDX_MADRE = -1;
+const esMadre = (i) => Number(i) === IDX_MADRE;
+/* La cartera de una fila de la pantalla. `clúster[-1]` es `undefined`, así que
+ * sin esto cualquier acción sobre la principal reventaría con un mensaje que
+ * no dice nada. */
+function carteraDe(i) { return esMadre(i) ? rápida : clúster[Number(i)]; }
+/* Como se llama una fila en los mensajes. "#-1" no le dice nada a nadie. */
+const etiquetaFila = (i) => (esMadre(i) ? "main" : "#" + i);
+
 function proveedorRPC() {
   if (!provRPC) {
     provRPC = new ethers.JsonRpcProvider(FALLBACK_RPCS[0], ARC.chainId, { staticNetwork: true });
@@ -2737,9 +2767,22 @@ function memLeer() {
 }
 function memGuardar() {
   if (!cuentaPrincipal) return;
+  /* CADA FILA GUARDA A QUIÉN PERTENECE, y no es un adorno.
+   * ---------------------------------------------------------------------
+   * Esto era un array y se leía por POSICIÓN (`g.filas[i]`), o sea que la
+   * primera tarjeta era la #0, la segunda la #1… Al meter la rápida principal
+   * delante, la posición 0 pasa a ser suya y TODAS las hijas habrían leído el
+   * importe y el tick de la de al lado. No da ningún error: sólo aparecen
+   * cantidades cambiadas de sitio, que es peor.
+   *
+   * Se guarda `w` (el índice real, "-1" o "0", "1"…) y se busca por él. Lo
+   * guardado ANTES de este cambio no lleva `w`, así que se cae a la posición,
+   * que para esos datos sigue siendo correcta — no existía la fila de la
+   * principal cuando se escribieron. */
   const filas = [];
   document.querySelectorAll("#fwList [data-w]").forEach((el) => {
     filas.push({
+      w: el.dataset.w,
       on: el.querySelector(".wSel").checked,
       amt: el.querySelector(".wAmt").value,
       slip: el.querySelector(".wSlip").value,
@@ -2912,7 +2955,9 @@ async function pintarCarteras() {
 function pintarTotal(usdc, toks, vals) {
   const caja = $("#fwTotal");
   if (!caja) return;
-  if (!clúster.length) { caja.hidden = true; return; }
+  /* La principal cuenta en el total. Ahora opera, así que dejarla fuera daría
+   * un "everything" que no es todo. */
+  if (!rápida && !clúster.length) { caja.hidden = true; return; }
   const suma = (a) => a.reduce((x, y) => x + (typeof y === "number" ? y : 0), 0);
   const totUSDC = usdc.reduce((x, y) => x + (y ? aUSDC(y) : 0), 0);
   const totVal = suma(vals);
@@ -2924,6 +2969,9 @@ function pintarTotal(usdc, toks, vals) {
   let totPuesto = 0, totSacado = 0, conCoste = 0;
   const todosLosApuntes = costeTodo();
   const mias = new Set(clúster.map((w) => w.address.toLowerCase()));
+  /* Y la principal, que desde el 8-sep también compra y vende: sin esto su
+   * P/L no contaría en el total y el número saldría corto sin decir por qué. */
+  if (rápida) mias.add(rápida.address.toLowerCase());
   for (const k of Object.keys(todosLosApuntes)) {
     const [dirW, dirT] = k.split("|");
     if (!mias.has(dirW)) continue;
@@ -2940,7 +2988,9 @@ function pintarTotal(usdc, toks, vals) {
     if (cls) b.className = cls;
     d.append(b); return d;
   };
-  caja.append(dato(clúster.length + (clúster.length === 1 ? " wallet" : " wallets"), ""));
+  const nFilas = (rápida ? 1 : 0) + clúster.length;
+  caja.append(dato(nFilas + (nFilas === 1 ? " wallet" : " wallets") +
+    (rápida && clúster.length ? " (main + " + clúster.length + ")" : ""), ""));
   caja.append(dato("USDC", dinero(totUSDC)));
   if (trToken) {
     caja.append(dato(trToken.symbol + " value", totVal > 0 ? dinero(totVal) : "—"));
@@ -2967,20 +3017,53 @@ function estadoActual() {
   return prev;
 }
 
+/* Lo guardado de UNA fila. Busca por `w`; si lo guardado es viejo y no lo
+ * lleva, cae a la posición, que para esos datos es lo correcto. */
+function guardadoDe(g, i) {
+  if (!g || !Array.isArray(g.filas)) return null;
+  const porW = g.filas.find((f) => f && f.w !== undefined && String(f.w) === String(i));
+  if (porW) return porW;
+  if (g.filas.some((f) => f && f.w !== undefined)) return null; // formato nuevo: no adivinar
+  return esMadre(i) ? null : g.filas[i] || null;
+}
+
 function tarjetaCartera(i, w, prev, saldoUSDC, saldoTok, valorVenta) {
   /* Lo que hay en pantalla manda; si no hay nada -- primer pintado tras
    * recargar -- se coge lo guardado, y solo despues el valor por defecto. */
   const g = memLeer();
-  const p = prev.get(String(i)) || (g && g.filas && g.filas[i]) || null;
+  const p = prev.get(String(i)) || guardadoDe(g, i) || null;
   const card = document.createElement("div");
   card.className = "wcard"; card.dataset.w = String(i);
+  if (esMadre(i)) card.classList.add("wcard-main");
 
   const top = document.createElement("div"); top.className = "wcard-top";
   const cb = document.createElement("input");
   cb.type = "checkbox"; cb.className = "wSel";
   cb.checked = p ? p.on : true;
+  /* LA PRINCIPAL NO SE MARCA, Y ESA ES TODA LA REGLA.
+   * ---------------------------------------------------------------------
+   * Queda fuera de TODO lo que va en bloque -- comprar con todas, vender con
+   * todas, financiar las marcadas, devolverlas, el reparto -- y se consigue
+   * con una casilla desactivada y sin marcar, no con un `if` en cada sitio.
+   * `elegidas()` ya salta lo no marcado, así que los cinco botones la excluyen
+   * solos y no hay ninguno que se pueda olvidar mañana.
+   *
+   * Sus propios botones de Buy y Sell SÍ funcionan: pasan su índice explícito
+   * y esa vía no mira la casilla.
+   *
+   * Y no es un capricho de interfaz: la principal es quien PAGA el reparto y
+   * quien RECIBE lo que vuelve. Marcarla sería mandarse dinero a uno mismo
+   * gastando gas. */
+  if (esMadre(i)) {
+    cb.checked = false;
+    cb.disabled = true;
+    cb.title = "The fast wallet stays out of the bulk buttons — use its own Buy and Sell";
+  }
   cb.addEventListener("change", () => { card.classList.toggle("is-on", cb.checked); memGuardar(); });
-  const nm = document.createElement("b"); nm.textContent = "#" + i;
+  /* "main", no "#-1". El índice interno no es asunto de quien mira. */
+  const nm = document.createElement("b");
+  nm.textContent = esMadre(i) ? "main" : "#" + i;
+  if (esMadre(i)) nm.title = "The fast wallet itself — it funds the others and can trade too";
   const ad = document.createElement("span"); ad.className = "wcard-addr";
   ad.textContent = w.address.slice(0, 8) + "…" + w.address.slice(-4);
   ad.title = w.address;
@@ -3095,9 +3178,28 @@ function tarjetaCartera(i, w, prev, saldoUSDC, saldoTok, valorVenta) {
   acts.append(
     bt("Buy", "btn-primary", () => operarConElClúster(true, [i])),
     bt("Sell", "", () => operarConElClúster(false, [i])),
-    bt("Fund", "", () => financiarUna(i)),
-    bt("→ fast", "", () => devolverUna(i)),
   );
+  /* LA PRINCIPAL NO SE FINANCIA NI SE DEVUELVE A SÍ MISMA. Es quien paga y
+   * quien recibe, así que esos dos botones ahí no significan nada. */
+  if (!esMadre(i)) {
+    acts.append(
+      bt("Fund", "", () => financiarUna(i)),
+      bt("$ → fast", "", () => devolverUna(i)),
+    );
+    /* EL QUE FALTABA. Había botones para mover el USDC en los dos sentidos y
+     * ninguno para mover LO QUE COMPRAS, que es justo lo que quieres juntar
+     * antes de vender de una vez o de sacarlo. Sin esto había que vender desde
+     * cada hija por separado.
+     *
+     * Manda el saldo ENTERO del token pegado arriba. No lleva importe porque
+     * partir una posición entre carteras es lo contrario de lo que se quiere
+     * aquí: esto es recoger. */
+    const etq = trToken ? trToken.symbol + " → fast" : "token → fast";
+    const b = bt(etq, "", () => mandarTokenALaRápida(i));
+    if (!trToken) { b.disabled = true; b.title = "Paste a token address above first"; }
+    else if (saldoTok === 0n) { b.disabled = true; b.title = "This one holds none"; }
+    acts.append(b);
+  }
   card.append(acts);
   return card;
 }
@@ -3107,23 +3209,30 @@ async function pintarClúster() {
   if (!caja) return;
   const prev = estadoActual();
   caja.textContent = "";
-  if (!clúster.length) {
+  if (!rápida) {
     const p = document.createElement("p"); p.className = "empty";
-    p.textContent = rápida ? "No cluster wallets yet — set how many above."
-                           : "Derive the fast wallet first.";
+    p.textContent = "Derive the fast wallet first.";
     caja.append(p); return;
   }
-  clúster.forEach((w, i) => caja.append(tarjetaCartera(i, w, prev, null, null)));
+  /* LA PRINCIPAL VA LA PRIMERA, y va aunque no haya ni una hija: con cero
+   * hijas antes salía "no cluster wallets yet" y no se podía operar con
+   * nada, teniendo una cartera con dinero delante. */
+  const filas = [[IDX_MADRE, rápida], ...clúster.map((w, i) => [i, w])];
+  filas.forEach(([i, w]) => caja.append(tarjetaCartera(i, w, prev, null, null)));
 
   /* Los saldos, despues de pintar: la rejilla sale ya y se rellena, en vez de
    * quedarse en blanco mientras una cadena lenta contesta. */
   try {
-    const usdc = await Promise.all(clúster.map((w) => saldoDe(w.address).catch(() => null)));
-    let toks = clúster.map(() => null);
-    let vals = clúster.map(() => null);
+    /* Los saldos van por POSICIÓN en `filas`, no por índice de hija: la fila 0
+     * es la principal y su índice es -1. Mezclarlos pintaría el saldo de una
+     * cartera en la tarjeta de otra. */
+    const cartsFila = filas.map(([, w]) => w);
+    const usdc = await Promise.all(cartsFila.map((w) => saldoDe(w.address).catch(() => null)));
+    let toks = cartsFila.map(() => null);
+    let vals = cartsFila.map(() => null);
     if (trToken) {
       const c = new ethers.Contract(trToken.address, ERC20_ABI, proveedorRPC());
-      toks = await Promise.all(clúster.map((w) => c.balanceOf(w.address).catch(() => null)));
+      toks = await Promise.all(cartsFila.map((w) => c.balanceOf(w.address).catch(() => null)));
       /* Una cotizacion de venta por cartera. Son N llamadas, y por eso esto va
        * en el boton de refrescar y no en un temporizador: los nodos de Arc se
        * caen media jornada y una pagina que pregunta sola es una pagina que
@@ -3159,7 +3268,7 @@ async function pintarClúster() {
     }
     const prev2 = estadoActual();
     caja.textContent = "";
-    clúster.forEach((w, i) => caja.append(tarjetaCartera(i, w, prev2, usdc[i], toks[i], vals[i])));
+    filas.forEach(([i, w], k) => caja.append(tarjetaCartera(i, w, prev2, usdc[k], toks[k], vals[k])));
     pintarTotal(usdc, toks, vals);
   } catch { /* un nodo mudo no puede dejar la rejilla rota */ }
 }
@@ -3170,6 +3279,11 @@ async function financiarUna(i) {
   const log = fwLog();
   try {
     if (!rápida) throw new Error("derive the fast wallet first");
+    /* Financiar la principal sería que se pagase a sí misma. No debería poder
+     * llegar aquí --su tarjeta no lleva ese botón y las acciones en bloque la
+     * saltan por la casilla desactivada-- pero el día que alguien añada otra
+     * vía, que falle diciendo por qué y no con `clúster[-1] is undefined`. */
+    if (esMadre(i)) throw new Error("that IS the fast wallet — it pays, it does not fund itself");
     const w = clúster[i];
     const el = document.querySelector('#fwList [data-w="' + i + '"]');
     const cuánto = deUSDC(Number(el.querySelector(".wAmt").value) || 0);
@@ -3181,13 +3295,94 @@ async function financiarUna(i) {
     await tx.wait();
     log("#" + i + " funded with $" + aUSDC(cuánto).toFixed(4), "ok");
     pintarCarteras();
-  } catch (e) { log("#" + i + ": " + readableError(e), "err"); }
+  } catch (e) { log(etiquetaFila(i) + ": " + readableError(e), "err"); }
+}
+
+/* ── LLEVAR EL TOKEN A LA RÁPIDA PRINCIPAL ──────────────────────────────
+ *
+ * El hermano del botón de USDC, que faltaba. Manda el saldo ENTERO del token
+ * pegado arriba desde una hija a la rápida.
+ *
+ * LA TRAMPA DE ESTA CADENA: en Arc el gas ES USDC, así que una hija con el
+ * token dentro y el USDC a cero NO PUEDE FIRMAR el envío. El token se queda
+ * ahí, y el mensaje que sale de la cadena por su cuenta ("insufficient funds")
+ * no dice cuál de las dos cosas falta. Se comprueba antes y se dice con
+ * palabras: manda gas primero con "Fund".
+ *
+ * Y NO se descuenta reserva del token: la reserva de gas se descuenta del USDC
+ * y sólo del USDC (`máximoASacar`). Aquí se manda el saldo entero del token
+ * porque el token no paga gas. */
+async function mandarTokenALaRápida(i) {
+  const log = fwLog();
+  try {
+    if (!rápida) throw new Error("derive the fast wallet first");
+    if (esMadre(i)) throw new Error("that IS the fast wallet");
+    if (!trToken) throw new Error("paste a token address above first");
+    const w = carteraDe(i);
+    if (!w) throw new Error("no wallet #" + i);
+
+    const c = new ethers.Contract(trToken.address, ERC20_ABI, w);
+    const saldo = await c.balanceOf(w.address);
+    if (saldo === 0n) throw new Error("#" + i + " holds no " + trToken.symbol);
+
+    /* El gas, ANTES de firmar. Una hija llena de token y vacía de USDC no
+     * puede mover nada, y conviene decirlo con nombre y cifra. */
+    const gp = await precioGas();
+    const usdc = await saldoDe(w.address);
+    const hace_falta = GAS_TRANSFERENCIA * BigInt(gp) * 3n;
+    if (usdc < hace_falta) {
+      throw new Error("#" + i + " has $" + aUSDC(usdc).toFixed(4) +
+        " and needs about $" + aUSDC(hace_falta).toFixed(4) +
+        " of USDC for gas — on Arc the gas IS USDC. Fund it first.");
+    }
+
+    const tx = await c.transfer(rápida.address, saldo);
+    await tx.wait();
+    log("#" + i + " → fast wallet: " +
+        Number(ethers.formatUnits(saldo, trToken.decimals)).toLocaleString("es") + " " + trToken.symbol, "ok");
+    pintarCarteras();
+  } catch (e) { log(etiquetaFila(i) + ": " + readableError(e), "err"); }
+}
+
+/* Todas de golpe. Una a una, no en paralelo: comparten nonce con nada pero sí
+ * el mismo nodo, y veinte envíos a la vez contra un RPC de Arc es como se
+ * pierde la mitad. */
+async function barrerToken() {
+  const log = fwLog();
+  try {
+    if (!rápida) throw new Error("derive the fast wallet first");
+    if (!trToken) throw new Error("paste a token address above first");
+    if (!clúster.length) throw new Error("no cluster to sweep");
+    let movidas = 0, sinGas = 0;
+    for (let i = 0; i < clúster.length; i++) {
+      const w = clúster[i];
+      try {
+        const c = new ethers.Contract(trToken.address, ERC20_ABI, w);
+        const saldo = await c.balanceOf(w.address);
+        if (saldo === 0n) continue;
+        const gp = await precioGas();
+        if ((await saldoDe(w.address)) < GAS_TRANSFERENCIA * BigInt(gp) * 3n) {
+          sinGas += 1;
+          log("  #" + i + ": holds " + trToken.symbol + " but has no USDC for gas — fund it first", "err");
+          continue;
+        }
+        const tx = await c.transfer(rápida.address, saldo);
+        await tx.wait();
+        movidas += 1;
+        log("  #" + i + " → " + Number(ethers.formatUnits(saldo, trToken.decimals)).toLocaleString("es") + " " + trToken.symbol);
+      } catch (e) { log("  " + etiquetaFila(i) + ": " + readableError(e), "err"); }
+    }
+    log(movidas + " wallet(s) sent their " + trToken.symbol + " to the fast wallet" +
+        (sinGas ? " · " + sinGas + " could not, no gas" : ""), movidas ? "ok" : "err");
+    pintarCarteras();
+  } catch (e) { log(readableError(e), "err"); }
 }
 
 async function devolverUna(i) {
   const log = fwLog();
   try {
     if (!rápida) throw new Error("derive the fast wallet first");
+    if (esMadre(i)) throw new Error("that IS the fast wallet — it receives, it does not send to itself");
     const w = clúster[i];
     const gp = await precioGas();
     const sacar = máximoASacar(await saldoDe(w.address), gp);
@@ -3196,7 +3391,7 @@ async function devolverUna(i) {
     await tx.wait();
     log("#" + i + " → fast wallet: $" + aUSDC(sacar).toFixed(4), "ok");
     pintarCarteras();
-  } catch (e) { log("#" + i + ": " + readableError(e), "err"); }
+  } catch (e) { log(etiquetaFila(i) + ": " + readableError(e), "err"); }
 }
 
 /* UNA POR CLIC, no un numero que reconstruye el conjunto.
@@ -3364,6 +3559,7 @@ $("#fwSweepFast").addEventListener("click", () => {
   if (!rápida) return;
   barrer(rápida.address, "the fast wallet");
 });
+$("#fwSweepTok").addEventListener("click", () => barrerToken());
 $("#fwSweepMain").addEventListener("click", async () => {
   if (!cuentaPrincipal) return;
   await barrer(cuentaPrincipal, "your main wallet");
@@ -3492,9 +3688,12 @@ function elegidas(solo) {
     const i = Number(el.dataset.w);
     if (solo && !solo.includes(i)) return;
     if (!solo && !el.querySelector(".wSel").checked) return;
+    /* `clúster[-1]` es `undefined`: la principal se resuelve aparte. */
+    const w = carteraDe(i);
+    if (!w) return;
     out.push({
       i,
-      w: clúster[i],
+      w,
       cantidad: Number(el.querySelector(".wAmt").value) || 0,
       slippage: Number(el.querySelector(".wSlip").value) || 0,
     });
@@ -3553,7 +3752,7 @@ async function operarConElClúster(esCompra, solo) {
            * saldo no sabes de memoria es como se firma una venta que revierte. */
           const c = new ethers.Contract(trToken.address, ERC20_ABI, proveedorRPC());
           amountIn = await c.balanceOf(w.address);
-          if (amountIn === 0n) { log("  #" + i + ": holds none, skipped"); continue; }
+          if (amountIn === 0n) { log("  " + etiquetaFila(i) + ": holds none, skipped"); continue; }
         }
 
         /* LA COTIZACION VA AQUI, justo antes de SU operacion, no al principio.
@@ -3562,7 +3761,7 @@ async function operarConElClúster(esCompra, solo) {
          * seria mentira para todas menos la primera. */
         const esperado = await cotizar(entra, sale, amountIn, trToken.fee);
         const minOut = (esperado * BigInt(Math.round((100 - slippage) * 100))) / 10000n;
-        log("  #" + i + ": " + ethers.formatUnits(amountIn, decEntra) + " → " +
+        log("  " + etiquetaFila(i) + ": " + ethers.formatUnits(amountIn, decEntra) + " → " +
             Number(ethers.formatUnits(esperado, decSale)).toLocaleString("es") +
             "  (min " + Number(ethers.formatUnits(minOut, decSale)).toLocaleString("es") + ", " + slippage + "%)");
 
@@ -3597,12 +3796,12 @@ async function operarConElClúster(esCompra, solo) {
           costeAnotar(w.address, trToken.address, 0,
                       vuelta !== null ? vuelta : Number(ethers.formatUnits(esperado, decSale)));
         }
-        log("  #" + i + ": done", "ok");
+        log("  " + etiquetaFila(i) + ": done", "ok");
       } catch (e) {
         /* Una cartera que falla NO para a las demas: son independientes, y
          * pararlas todas porque a la tercera le falto gas es perder el resto
          * de la ejecucion por nada. */
-        log("  #" + i + ": " + readableError(e), "err");
+        log("  " + etiquetaFila(i) + ": " + readableError(e), "err");
       }
       if (espera && k < lista.length - 1) await new Promise((s) => setTimeout(s, espera * 1000));
     }
@@ -3619,7 +3818,12 @@ $("#trToken").addEventListener("input", () => {
 const tarjetas = () => document.querySelectorAll("#fwList [data-w]");
 const marcar = (v) => {
   tarjetas().forEach((el) => {
-    el.querySelector(".wSel").checked = v;
+    const cb = el.querySelector(".wSel");
+    /* "Select all" NO marca la principal. Su casilla está desactivada a
+     * propósito (ver `tarjetaCartera`) y saltársela desde aquí la metería en
+     * el reparto y en las compras en bloque por la puerta de atrás. */
+    if (cb.disabled) return;
+    cb.checked = v;
     el.classList.toggle("is-on", v);
   });
   memGuardar();
@@ -3713,6 +3917,124 @@ const LOGS_TRAMO = 10000;
 const LOGS_TRAMOS = 12;        // ~16 h hacia atras; subirlo es mas espera, no mas riesgo
 const SWAP_TOPIC = "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67";
 
+/* ─── EL COSTE, POR EL HISTORIAL DE LA CARTERA Y NO BARRIENDO LA CADENA ───
+ *
+ * POR QUE SE REESCRIBIO, con la cifra: al mudar la pagina a otro dominio hubo
+ * que reconstruir el coste desde cero, y el boton de abajo trajo $7,58 de los
+ * $544,12 que habia de verdad. No fallaba: es que `eth_getLogs` de este RPC
+ * acepta 10.000 bloques por llamada -- 83 minutos de cadena -- y doce tramos
+ * son 16,7 horas. Todo lo comprado antes, para el boton no existia.
+ *
+ * Preguntar por la CARTERA en vez de barrer la piscina cambia la escala:
+ *
+ *     eth_getLogs          10.000 bloques por llamada
+ *     Arcscan tokentx     200.000 bloques por llamada     20 veces mas
+ *
+ * Y una sola llamada trae TODOS sus tokens a la vez -- comprobado: USDC, CUSP
+ * y COOLCAT en la misma respuesta -- asi que el USDC de cada operacion viene
+ * en el mismo viaje que la moneda, y se cruzan por `hash`. Diez dias de
+ * historial pasan de ~173 llamadas por cartera a ~9.
+ *
+ * DOS COSAS QUE COSTARON UNA MEDICION CADA UNA:
+ *
+ * 1. EL LIMITE ES `endblock - startblock <= 199.999`, no 200.000. Pedir la
+ *    ventana redonda devuelve "Block range too large" -- el mismo desfase de
+ *    uno que ya mordio con eth_getLogs.
+ *
+ * 2. UN `result` QUE NO ES UNA LISTA SIGNIFICA "NO LO SE", NUNCA "CERO".
+ *    Arcscan contesta de tres formas y solo dos son un dato:
+ *      status=1  message=OK                     -> lista con movimientos
+ *      status=0  message=No transactions found  -> lista VACIA, vacio de verdad
+ *      status=0  message=NOTOK                  -> TEXTO con el error
+ *    Tratar el tercero como cero borraria el coste de una cartera entera y la
+ *    dejaria en "+0%" sin que nada avisara. Por eso se lanza. Es la misma
+ *    leccion que INDEXER.md dejo escrita del indexer.
+ */
+const ARCSCAN_API = "https://api.arc-scan.org/api";
+const AS_VENTANA = 200000;      // ~27,8 h de cadena por llamada
+const AS_VENTANAS = 24;         // ~27 dias hacia atras como mucho
+/* Una cartera rapida se crea y se usa en un periodo; pasado su nacimiento no
+   hay nada mas atras. Tres ventanas seguidas vacias es el final de su
+   historia, y parar ahi ahorra la mayoria de las llamadas. */
+const AS_VACIAS_PARA_PARAR = 3;
+
+async function arcscanMovimientos(dir, desde, hasta) {
+  const u = new URL(ARCSCAN_API);
+  u.searchParams.set("module", "account");
+  u.searchParams.set("action", "tokentx");
+  u.searchParams.set("address", dir);
+  u.searchParams.set("startblock", String(Math.max(0, desde)));
+  u.searchParams.set("endblock", String(hasta));
+  u.searchParams.set("sort", "asc");
+
+  const r = await fetch(u, { headers: { Accept: "application/json" } });
+  if (!r.ok) throw new Error("Arcscan HTTP " + r.status);
+  const j = await r.json();
+  /* LA UNICA COMPROBACION QUE IMPORTA. Ver el punto 2 de arriba. */
+  if (!Array.isArray(j.result)) {
+    throw new Error(String(j.result || j.message || "Arcscan no contesto una lista").slice(0, 120));
+  }
+  return j.result;
+}
+
+async function costeDesdeArcscan(w, ultimo) {
+  if (!trToken) return null;
+  const yo = w.address.toLowerCase();
+  const elToken = trToken.address.toLowerCase();
+  const elUsdc = QUOTE.address.toLowerCase();
+
+  let puesto = 0, sacado = 0, swaps = 0, vacias = 0, ventanasLeidas = 0;
+  const porHash = new Map();
+
+  for (let k = 0; k < AS_VENTANAS; k++) {
+    const hasta = ultimo - k * AS_VENTANA;
+    if (hasta < 0) break;
+    const desde = Math.max(0, hasta - AS_VENTANA + 1);
+    const movs = await arcscanMovimientos(w.address, desde, hasta);
+    ventanasLeidas += 1;
+
+    if (!movs.length) {
+      if (++vacias >= AS_VACIAS_PARA_PARAR) break;
+      continue;
+    }
+    vacias = 0;
+
+    for (const t of movs) {
+      const contrato = String(t.contractAddress).toLowerCase();
+      if (contrato !== elToken && contrato !== elUsdc) continue;
+      const entra = String(t.to).toLowerCase() === yo;
+      const sale = String(t.from).toLowerCase() === yo;
+      if (!entra && !sale) continue;
+
+      const g = porHash.get(t.hash) || { tok: 0, usdc: 0 };
+      if (contrato === elToken) {
+        /* Del lado de la moneda solo interesa la DIRECCION, no la cantidad:
+           un supply de 18 decimales no cabe en un Number sin perder cifras, y
+           aqui solo hace falta saber si entro o salio. */
+        g.tok += entra ? 1 : -1;
+      } else {
+        /* El USDC son 6 decimales: cabe de sobra y es la cifra que se suma. */
+        g.usdc += (entra ? 1 : -1) * (Number(t.value) / 10 ** Number(t.tokenDecimal || 6));
+      }
+      porHash.set(t.hash, g);
+    }
+  }
+
+  /* UNA OPERACION ES UNA TRANSACCION CON LAS DOS PATAS. Un movimiento de USDC
+     suelto es fondear la cartera, y uno de moneda suelto es traspasarla entre
+     carteras propias: ninguno de los dos es una compra ni una venta, y contar
+     el fondeo como compra inflaria el coste de todas las rapidas. */
+  for (const g of porHash.values()) {
+    if (g.tok > 0 && g.usdc < 0) { puesto += -g.usdc; swaps += 1; }
+    else if (g.tok < 0 && g.usdc > 0) { sacado += g.usdc; swaps += 1; }
+  }
+
+  return {
+    neto: Math.max(0, puesto - sacado), puesto, sacado, swaps,
+    bloques: ventanasLeidas * AS_VENTANA,
+  };
+}
+
 function comoInt256(hex) {
   const v = BigInt("0x" + hex);
   return v >= (1n << 255n) ? v - (1n << 256n) : v;
@@ -3759,15 +4081,17 @@ async function leerCostesReales() {
   const b = $("#fwCost"), nota = $("#fwRefreshNote");
   const log = fwLog();
   if (!trToken) { nota.textContent = "Paste a token address above first — the cost is per coin."; return; }
-  if (!clúster.length) { nota.textContent = "No cluster wallets to read."; return; }
+  if (!rápida && !clúster.length) { nota.textContent = "No wallets to read."; return; }
   b.disabled = true;
   const antes = b.textContent;
   b.textContent = "reading the chain…";
   try {
     const ultimo = Number(BigInt(await rawCall("eth_blockNumber", [])));
     let horas = 0;
-    for (let i = 0; i < clúster.length; i++) {
-      const w = clúster[i];
+    /* La principal tambien, que desde el 8-sep compra y vende: leer el coste
+     * de todas menos de una deja su P/L en "set what you paid" para siempre. */
+    const filas = (rápida ? [[IDX_MADRE, rápida]] : []).concat(clúster.map((w, i) => [i, w]));
+    for (const [i, w] of filas) {
       try {
         const r = await costeDesdeLaCadena(w, ultimo);
         if (!r) continue;
@@ -3775,9 +4099,9 @@ async function leerCostesReales() {
         const t = costeTodo();
         t[costeClave(w.address, trToken.address)] = { puesto: r.puesto, sacado: r.sacado };
         try { localStorage.setItem(COSTE_KEY, JSON.stringify(t)); } catch {}
-        log("#" + i + ": " + r.swaps + " swaps · in $" + r.puesto.toFixed(4) +
+        log(etiquetaFila(i) + ": " + r.swaps + " swaps · in $" + r.puesto.toFixed(4) +
             " · out $" + r.sacado.toFixed(4) + " · net $" + r.neto.toFixed(4), "ok");
-      } catch (e) { log("#" + i + ": " + readableError(e), "err"); }
+      } catch (e) { log(etiquetaFila(i) + ": " + readableError(e), "err"); }
     }
     nota.textContent = "Read from the pool's own Swap events — bought minus sold, " +
       "over the last " + horas.toFixed(1) + " h. Anything older is not counted.";

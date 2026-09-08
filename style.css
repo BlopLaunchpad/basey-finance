@@ -466,6 +466,13 @@ body.locked > *:not(#gate) { display: none !important; }
 /* La seleccionada se ve SIN leer el tick: el borde lo dice desde lejos, que es
  * lo que hace falta cuando eliges seis de veinte. */
 .wcard.is-on { border-color: var(--accent); background: var(--surface-2); }
+/* LA RÁPIDA PRINCIPAL. Se distingue porque no es una hija más: es la que paga
+   el reparto y la que recibe lo que vuelve, y queda fuera de los botones que
+   operan con todas. Su casilla va desactivada a propósito, así que también
+   se atenúa para que se vea que no es un olvido. */
+.wcard-main { border-style: dashed; }
+.wcard-main .wcard-top b { color: var(--accent); }
+.wcard-main .wSel { opacity: .35; cursor: not-allowed; }
 .wcard-top { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
 .wcard-top b { font-size: 13px; }
 .wcard-addr { font: 11.5px var(--mono); color: var(--text-faint); margin-left: auto; }

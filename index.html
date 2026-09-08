@@ -16,7 +16,7 @@
 <meta name="googlebot" content="noindex, nofollow">
 <!-- Sin `description` a proposito: es lo que un buscador enseña bajo el
      titulo, y aqui no queremos ni titulo ni resumen. -->
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
 
@@ -664,6 +664,16 @@
     </label>
   </div>
 
+  <!-- EL MISMO GESTO, PERO PARA LO QUE COMPRAS.
+       Los dos de arriba mueven USDC. Faltaba el del token: sin él había que
+       vender desde cada cartera por separado, o mandarlo a mano una a una. -->
+  <label class="field">
+    <span>&nbsp;</span>
+    <button id="fwSweepTok" class="btn">Bring every token to the fast wallet</button>
+    <small id="fwSweepTokNote">The one pasted below, from every cluster wallet that holds it.
+    On Arc the gas is USDC, so a wallet with tokens and no USDC cannot send &mdash; fund it first.</small>
+  </label>
+
   <div class="log" id="fwLog" hidden></div>
 
   <h2>Buy and sell with them</h2>
@@ -738,6 +748,6 @@
 
 
 
-<script type="module" src="app.js?v=42"></script>
+<script type="module" src="app.js?v=43"></script>
 </body>
 </html>
