@@ -232,6 +232,12 @@ const ERC20_ABI = [
   "function decimals() view returns (uint8)", "function totalSupply() view returns (uint256)",
   "function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)",
   "function approve(address,uint256) returns (bool)",
+  /* `transfer` faltaba, y hasta el 8-sep no hacia falta: esta pagina COMPRABA
+   * y VENDIA (que es `approve` + el Router) pero nunca movia un token de una
+   * cartera a otra. El boton de llevarlo a la rapida principal es lo primero
+   * que lo necesita, y sin esta linea `c.transfer(...)` no existe -- el fallo
+   * no dice "falta en el ABI", dice "is not a function". */
+  "function transfer(address,uint256) returns (bool)",
 ];
 const FACTORY_ABI = ["function getPool(address,address,uint24) view returns (address)"];
 const POOL_ABI = ["function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16,uint16,uint16,uint8,bool)"];
@@ -3329,7 +3335,14 @@ async function mandarTokenALaRápida(i) {
      * puede mover nada, y conviene decirlo con nombre y cifra. */
     const gp = await precioGas();
     const usdc = await saldoDe(w.address);
-    const hace_falta = GAS_TRANSFERENCIA * BigInt(gp) * 3n;
+    /* `reservaDeGas`, no la fórmula a mano: es la MISMA cuenta que usa el resto
+     * del fichero (30.000 x precio x 3) y escribirla otra vez aquí fue el fallo
+     * del 8-sep — `GAS_TRANSFERENCIA` ni siquiera está importada en este
+     * fichero, así que el botón moría con "GAS_TRANSFERENCIA is not defined"
+     * en una cartera que sí tenía gas. `node --check` no ve un identificador
+     * que no existe, y la prueba en el navegador no lo pisó porque el botón
+     * estaba desactivado: sin saldo del token no había nada que mandar. */
+    const hace_falta = reservaDeGas(gp);
     if (usdc < hace_falta) {
       throw new Error("#" + i + " has $" + aUSDC(usdc).toFixed(4) +
         " and needs about $" + aUSDC(hace_falta).toFixed(4) +
@@ -3361,7 +3374,7 @@ async function barrerToken() {
         const saldo = await c.balanceOf(w.address);
         if (saldo === 0n) continue;
         const gp = await precioGas();
-        if ((await saldoDe(w.address)) < GAS_TRANSFERENCIA * BigInt(gp) * 3n) {
+        if ((await saldoDe(w.address)) < reservaDeGas(gp)) {
           sinGas += 1;
           log("  #" + i + ": holds " + trToken.symbol + " but has no USDC for gas — fund it first", "err");
           continue;
