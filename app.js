@@ -16,6 +16,7 @@
 
 import { FEATURES, OWNERSHIP, FEE_TIERS, RANGE_PRESETS, ARC, QUOTE, conflictsFor, verdict } from "./token-features.js?v=4";
 import { generateSource, powerList, metadataPreview } from "./solidity.js?v=4";
+import * as PAD from "./launchpad.js?v=1";
 import { derivarMadre, derivarClúster, máximoASacar, reservaDeGas,
          repartir, DISPERSE_SOURCE } from "./wallets.js?v=2";
 import { planPorDefecto, resumen as planResumen, avisosDe, precioDe,
@@ -4398,3 +4399,135 @@ $("#copySourceBtn").addEventListener("click", async () => {
 
 onPairChange();
 if (window.ethereum && window.ethereum.selectedAddress) connect();
+
+
+/* ── LANZAR EN NUESTRA PROPIA LANZADERA ────────────────────────────────────
+   La pestaña de al lado arma un token a medida con sus tramos de liquidez.
+   Esta lanza en la Factory que desplegamos el 10-sep, donde la economia la
+   pone el contrato: abre en $5.000, gradua en $50.000, 1% de comision y
+   reparto 80/20. Todo lo que sabe de la cadena vive en launchpad.js.
+
+   LO QUE NO SE PUEDE, Y LA PANTALLA LO DICE: crear el token y marcarlo como
+   token de plataforma en la MISMA transaccion. `setPlatformToken` es
+   onlyOwner y una cartera normal llama a una funcion por transaccion. Son
+   dos firmas seguidas con un solo boton. */
+
+function lpLog(t) {
+  const c = $("#lpLog");
+  if (!c) return;
+  c.hidden = false;
+  c.textContent += (c.textContent ? "\n" : "") + new Date().toLocaleTimeString() + "  " + t;
+  c.scrollTop = c.scrollHeight;
+}
+function lpAviso(t) {
+  const w = $("#lpWarn");
+  if (!w) return;
+  w.hidden = !t;
+  w.textContent = t || "";
+}
+
+/* El minimo de tokens solo tiene sentido si hay compra, y el contrato lo
+   EXIGE si la hay: `require(pairIn != 0 && minTokensOut != 0)`. */
+function lpSincronizar() {
+  const compra = Number(String($("#lpBuy") ? $("#lpBuy").value : "0").replace(/[^0-9.]/g, "")) || 0;
+  const caja = $("#lpMinBox");
+  if (caja) caja.hidden = !(compra > 0);
+}
+
+/* LA CASILLA DE TOKEN DE PLATAFORMA SE LE PREGUNTA AL CONTRATO.
+   No se compara contra una direccion escrita aqui: si algun dia se cambia
+   `platformWallet` con su setter, esta pantalla se entera sola. Y si la
+   lanzadera YA tiene token, la casilla no sale: la segunda llamada revierte. */
+async function lpRevisarPlataforma() {
+  const caja = $("#lpPlatBox");
+  if (!caja) return;
+  caja.hidden = true;
+  if (!account || !provider) return;
+  try {
+    const esPlat = await PAD.esLaPlataforma(account, provider);
+    const yaHay = await PAD.yaHayTokenDePlataforma(provider);
+    caja.hidden = !(esPlat && !yaHay);
+  } catch { /* sin red: se queda oculta, que es lo prudente */ }
+}
+
+function lpNumero(sel, decimales) {
+  const v = String($(sel) ? $(sel).value : "0").replace(/[^0-9.]/g, "").trim();
+  if (!v) return 0n;
+  return ethers.parseUnits(v, decimales);
+}
+
+async function lpLanzar() {
+  const btn = $("#lpRun");
+  lpAviso("");
+  if (!signer) { lpAviso("Conecta la wallet primero."); return; }
+  let datos;
+  try {
+    datos = {
+      name: $("#lpName").value.trim(),
+      symbol: $("#lpSym").value.trim(),
+      metadataURI: PAD.metadata({
+        description: $("#lpDesc").value.trim(),
+        website: $("#lpWeb").value.trim(),
+        twitter: $("#lpTw").value.trim(),
+        telegram: $("#lpTg").value.trim(),
+        image: $("#lpImage").value.trim(),
+      }),
+      supply: lpNumero("#lpSupply", 18),
+      /* El campo se rellena en PORCENTAJE porque es lo que se entiende, y el
+         contrato quiere puntos basicos. Se convierte aqui, en un solo sitio. */
+      creatorBurnBps: Math.round((Number(String($("#lpBurn").value).replace(/[^0-9.]/g, "")) || 0) * 100),
+      feeRecipient: account,
+      initialBuyPair: lpNumero("#lpBuy", 6),
+      minTokensOut: lpNumero("#lpMinOut", 18),
+    };
+  } catch (e) { lpAviso(String(e.message || e)); return; }
+
+  const malo = PAD.revisar(datos);
+  if (malo.length) { lpAviso(malo.join(" ")); return; }
+
+  const marcar = $("#lpPlat") && $("#lpPlat").checked && !$("#lpPlatBox").hidden;
+  btn.disabled = true;
+  const textoOriginal = btn.textContent;
+  try {
+    lpLog("lanzando " + datos.symbol + "…");
+    const r = await PAD.lanzar(signer, datos, (t) => { btn.textContent = t; lpLog(t); });
+    lpLog("token " + r.token);
+    lpLog("pool  " + r.pool);
+    const salida = $("#lpOut");
+    if (salida) {
+      salida.hidden = false;
+      salida.innerHTML = "";
+      const p1 = document.createElement("p");
+      p1.innerHTML = "<b>Launched.</b>";
+      const p2 = document.createElement("p");
+      p2.className = "muted";
+      /* Con textContent y no innerHTML: aqui entran datos que vienen de la
+         cadena y este repo ya se comio un XSS por pintar con innerHTML. */
+      p2.textContent = "token " + r.token + "  ·  pool " + r.pool;
+      salida.appendChild(p1); salida.appendChild(p2);
+    }
+    if (marcar && r.token) {
+      lpLog("marcando como token de plataforma (segunda firma)…");
+      const h = await PAD.marcarComoPlataforma(signer, r.token, (t) => { btn.textContent = t; lpLog(t); });
+      lpLog("marcado: " + h);
+      await lpRevisarPlataforma();
+    }
+    lpLog("listo.");
+  } catch (e) {
+    lpAviso(String(e.message || e));
+    lpLog("PARADO: " + String(e.message || e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
+}
+
+if ($("#lpRun")) {
+  $("#lpAddr").textContent = PAD.LANZADERA;
+  $("#lpBuy").addEventListener("input", lpSincronizar);
+  lpSincronizar();
+  $("#lpRun").addEventListener("click", lpLanzar);
+  $$(".subtab").forEach((s) => s.addEventListener("click", () => {
+    if (s.dataset.sub === "pad") lpRevisarPlataforma();
+  }));
+}
