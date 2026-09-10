@@ -271,6 +271,18 @@ input[inputmode="decimal"], input[inputmode="numeric"], #poolToken {
 .pos-lock.is-open { display: flex; }
 .empty { color: var(--text-faint); font-size: 13.5px; }
 
+/* LAS TRES QUE FALTABAN. El panel de la lanzadera las traia escritas desde
+   ayer y NINGUNA existia aqui, asi que el aviso se pintaba como texto suelto
+   y la linea de coste con el tamano del cuerpo. Un selector que no casa con
+   nada no da ni un aviso: la hoja se aplica entera y lo que ibas a pintar se
+   queda como estaba. */
+.warn { margin: 12px 0; border: 1px solid var(--danger); border-left-width: 3px; border-radius: var(--radius); background: var(--surface); padding: 11px 13px; color: var(--text); font-size: 13px; line-height: 1.55; }
+.cost { margin-top: 10px; color: var(--text-faint); font-size: 12.5px; }
+.muted { color: var(--text-dim); font-size: 13px; line-height: 1.55; }
+/* Y una direccion son 42 caracteres, un hash 66, en monoespaciada y en la
+   columna estrecha. Sin esto el hash se sale de su caja. */
+#lpOut code { overflow-wrap: anywhere; }
+
 .foot { border-top: 1px solid var(--line); padding: 18px 24px 40px; color: var(--text-faint); font-size: 12.5px; text-align: center; }
 
 @media (prefers-reduced-motion: reduce) {

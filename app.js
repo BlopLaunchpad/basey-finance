@@ -16,7 +16,7 @@
 
 import { FEATURES, OWNERSHIP, FEE_TIERS, RANGE_PRESETS, ARC, QUOTE, conflictsFor, verdict } from "./token-features.js?v=4";
 import { generateSource, powerList, metadataPreview } from "./solidity.js?v=4";
-import * as PAD from "./launchpad.js?v=1";
+import * as PAD from "./launchpad.js?v=2";
 import { derivarMadre, derivarClúster, máximoASacar, reservaDeGas,
          repartir, DISPERSE_SOURCE } from "./wallets.js?v=2";
 import { planPorDefecto, resumen as planResumen, avisosDe, precioDe,
@@ -4314,6 +4314,7 @@ function goStep(n) {
      un retorno anticipado -- la tercera vez en este fichero que una rama de
      salida se come un pintado y la caja aparece vacia sin dar ningun error. */
   if (String(n) === "7") { pintarMonedas(); pintarCarteras(); pintarClúster(); planDeCompra(); }
+  if (String(n) === "8") lpRefrescar();
   $$(".step").forEach((s) => s.classList.toggle("is-active", s.dataset.step === String(n)));
   $$("[data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== String(n); });
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -4410,7 +4411,10 @@ if (window.ethereum && window.ethereum.selectedAddress) connect();
    LO QUE NO SE PUEDE, Y LA PANTALLA LO DICE: crear el token y marcarlo como
    token de plataforma en la MISMA transaccion. `setPlatformToken` es
    onlyOwner y una cartera normal llama a una funcion por transaccion. Son
-   dos firmas seguidas con un solo boton. */
+   dos firmas, y por eso son DOS BOTONES: con uno solo, si la segunda firma
+   fallaba te quedabas sin saber si el token quedo puesto.
+
+   Y VIVE EN EL PASO 8, no en una pestana del 6. */
 
 function lpLog(t) {
   const c = $("#lpLog");
@@ -4434,20 +4438,173 @@ function lpSincronizar() {
   if (caja) caja.hidden = !(compra > 0);
 }
 
-/* LA CASILLA DE TOKEN DE PLATAFORMA SE LE PREGUNTA AL CONTRATO.
-   No se compara contra una direccion escrita aqui: si algun dia se cambia
-   `platformWallet` con su setter, esta pantalla se entera sola. Y si la
-   lanzadera YA tiene token, la casilla no sale: la segunda llamada revierte. */
-async function lpRevisarPlataforma() {
-  const caja = $("#lpPlatBox");
+/* QUIEN FIRMA AQUI ES LA RAPIDA, y se pide explicitamente en vez de confiar
+   en que `signer` ya lo sea. `signer` empieza siendo la wallet inyectada y
+   solo pasa a ser la rapida cuando alguien la deriva. La lanzadera tiene de
+   dueno la direccion de la rapida, asi que sin derivarla firmaria la
+   principal: el lanzamiento SI entraria --es permisivo-- y la marca
+   reventaria despues con NotOwner. El peor orden para enterarse. */
+function lpFirmante() {
+  if (!rápida) {
+    throw new Error("Derive your fast wallet in step 7: it signs this, and it is the owner of the launchpad.");
+  }
+  return rápida;
+}
+
+/* EL ESTADO SE LE PREGUNTA AL CONTRATO, no a una direccion escrita aqui: si
+   algun dia se cambia `platformWallet` con su setter, esta pantalla se entera
+   sola. Se lee por el RPC propio y no por la wallet, para que el panel diga
+   la verdad tambien sin conectar. Y ante un fallo de lectura NO se pinta un
+   estado inventado: se dice que no se pudo leer. Pintar el estado equivocado
+   ante una lectura fallida ya se pago en cusp-web. */
+async function lpRefrescar() {
+  const caja = $("#lpEstado");
+  const boton = $("#lpMark");
+  const quien = $("#lpQuienFirma");
   if (!caja) return;
-  caja.hidden = true;
-  if (!account || !provider) return;
+
+  if (quien) {
+    quien.textContent = rápida
+      ? "Your fast wallet " + rápida.address.slice(0, 6) + "\u2026" + rápida.address.slice(-4) +
+        " signs both buttons, so neither opens a popup."
+      : "Derive your fast wallet in step 7 first. It signs here, and it is the owner of this launchpad.";
+  }
+
+  let e;
   try {
-    const esPlat = await PAD.esLaPlataforma(account, provider);
-    const yaHay = await PAD.yaHayTokenDePlataforma(provider);
-    caja.hidden = !(esPlat && !yaHay);
-  } catch { /* sin red: se queda oculta, que es lo prudente */ }
+    e = await PAD.estado(proveedorRPC());
+  } catch (err) {
+    caja.textContent = "";
+    const p = document.createElement("p");
+    p.textContent = "Could not read the launchpad just now.";
+    caja.append(p);
+    if (boton) boton.disabled = true;
+    return;
+  }
+
+  /* textContent y no innerHTML: aqui entran direcciones que vienen de la
+     cadena, y este proyecto ya se comio un XSS por pintar con innerHTML. */
+  caja.textContent = "";
+  const filas = [
+    ["Launches so far", String(e.lanzamientos)],
+    ["Platform token", e.tienePlataforma ? e.token : "not set yet"],
+    ["Launches", e.pausada ? "paused" : "open"],
+    ["Owner", e.dueno],
+  ];
+  for (const par of filas) {
+    const p = document.createElement("p");
+    const b = document.createElement("b");
+    b.textContent = par[0] + ": ";
+    p.append(b, document.createTextNode(par[1]));
+    caja.append(p);
+  }
+  if (e.lanzamientos === 0 && !e.tienePlataforma) {
+    const p = document.createElement("p");
+    p.textContent = "Nothing has launched here yet, so the next coin is number 0 \u2014 the one meant to be the platform token.";
+    caja.append(p);
+  }
+
+  /* El boton de marcar mira al DUENO, que es quien puede llamar a
+     `setCuspToken`, no a `platformWallet`, que solo cobra. Hoy son la misma
+     direccion, y por eso preguntar por la equivocada no se veria. */
+  if (boton) {
+    const soyDueno = rápida ? await PAD.esElDueno(rápida.address, proveedorRPC()) : false;
+    boton.disabled = e.tienePlataforma || !soyDueno;
+    if (e.tienePlataforma) {
+      lpAvisoMarca("This launchpad already has a platform token, and it cannot be changed.");
+    } else if (!rápida) {
+      lpAvisoMarca("Derive your fast wallet in step 7: it is the owner of this launchpad.");
+    } else if (!soyDueno) {
+      lpAvisoMarca("Your fast wallet is not the owner of this launchpad, so it cannot mark anything.");
+    } else {
+      lpAvisoMarca("");
+    }
+  }
+}
+
+/* EL RESULTADO, CON EL CA COPIABLE. Es lo primero que se necesita despues de
+   lanzar y antes se quedaba en una linea del log. Cada direccion va en su
+   fila con su boton, porque copiar las dos juntas obliga a recortar a mano.
+
+   `textContent` en las dos, siempre: vienen de la cadena. Y si el
+   portapapeles esta bloqueado no se avisa de nada -- el `<code>` se puede
+   seleccionar igual, que es como se copia cuando el navegador no deja. */
+function lpResultado(r) {
+  const caja = $("#lpOut");
+  if (!caja) return;
+  caja.hidden = false;
+  caja.textContent = "";
+
+  const t = document.createElement("h3");
+  t.textContent = "Launched";
+  caja.append(t);
+
+  const filas = [
+    ["Token (CA)", r.token],
+    ["Pool", r.pool],
+    ["Transaction", r.hash],
+  ];
+  for (const par of filas) {
+    if (!par[1]) continue;
+    const fila = document.createElement("div");
+    fila.className = "chips";
+    const et = document.createElement("b");
+    et.textContent = par[0];
+    const dir = document.createElement("code");
+    dir.textContent = par[1];
+    const boton = document.createElement("button");
+    boton.className = "btn btn-sm";
+    boton.textContent = "Copy";
+    boton.addEventListener("click", async function () {
+      try {
+        await navigator.clipboard.writeText(par[1]);
+        boton.textContent = "Copied";
+        setTimeout(function () { boton.textContent = "Copy"; }, 1200);
+      } catch { /* bloqueado: el <code> se selecciona a mano igual */ }
+    });
+    fila.append(et, dir, boton);
+    caja.append(fila);
+  }
+}
+
+function lpAvisoMarca(t) {
+  const w = $("#lpMarkWarn");
+  if (!w) return;
+  w.hidden = !t;
+  w.textContent = t || "";
+}
+
+function lpLogMarca(t) {
+  const c = $("#lpMarkLog");
+  if (!c) return;
+  c.hidden = false;
+  c.textContent += (c.textContent ? "\n" : "") + new Date().toLocaleTimeString() + "  " + t;
+  c.scrollTop = c.scrollHeight;
+}
+
+/* MARCAR, EN SU PROPIO BOTON. No hay tercera oportunidad: el contrato lleva
+   `require(cuspToken == address(0))`. Por eso se confirma a mano, aunque la
+   rapida firme sin ventana: lo que protege aqui no es la firma, es el aviso. */
+async function lpMarcar() {
+  const btn = $("#lpMark");
+  lpAvisoMarca("");
+  const dir = String($("#lpMarkAddr").value || "").trim();
+  if (!ethers.isAddress(dir)) { lpAvisoMarca("That is not an address."); return; }
+  if (!window.confirm("Mark " + dir + " as the platform token?\n\nThis cannot be undone, and only the first one counts.")) return;
+  btn.disabled = true;
+  const texto = btn.textContent;
+  try {
+    const firmante = lpFirmante();
+    const h = await PAD.marcarComoPlataforma(firmante, dir, function (t) { btn.textContent = t; lpLogMarca(t); });
+    lpLogMarca("marked: " + h);
+    await lpRefrescar();
+  } catch (err) {
+    lpAvisoMarca(String(err.message || err));
+    lpLogMarca("STOPPED: " + String(err.message || err));
+  } finally {
+    btn.textContent = texto;
+    btn.disabled = false;
+  }
 }
 
 function lpNumero(sel, decimales) {
@@ -4459,7 +4616,7 @@ function lpNumero(sel, decimales) {
 async function lpLanzar() {
   const btn = $("#lpRun");
   lpAviso("");
-  if (!signer) { lpAviso("Conecta la wallet primero."); return; }
+  if (!rápida) { lpAviso("Derive your fast wallet in step 7: it is the one that signs here."); return; }
   let datos;
   try {
     datos = {
@@ -4476,7 +4633,9 @@ async function lpLanzar() {
       /* El campo se rellena en PORCENTAJE porque es lo que se entiende, y el
          contrato quiere puntos basicos. Se convierte aqui, en un solo sitio. */
       creatorBurnBps: Math.round((Number(String($("#lpBurn").value).replace(/[^0-9.]/g, "")) || 0) * 100),
-      feeRecipient: account,
+      /* Lo pone el modulo desde el firmante, que es la rapida. Escribir aqui
+         `account` cobraba a la wallet inyectada cuando aun no habia rapida. */
+      feeRecipient: null,
       initialBuyPair: lpNumero("#lpBuy", 6),
       minTokensOut: lpNumero("#lpMinOut", 18),
     };
@@ -4485,37 +4644,25 @@ async function lpLanzar() {
   const malo = PAD.revisar(datos);
   if (malo.length) { lpAviso(malo.join(" ")); return; }
 
-  const marcar = $("#lpPlat") && $("#lpPlat").checked && !$("#lpPlatBox").hidden;
   btn.disabled = true;
   const textoOriginal = btn.textContent;
   try {
-    lpLog("lanzando " + datos.symbol + "…");
-    const r = await PAD.lanzar(signer, datos, (t) => { btn.textContent = t; lpLog(t); });
+    lpLog("launching " + datos.symbol + "…");
+    const r = await PAD.lanzar(lpFirmante(), datos, (t) => { btn.textContent = t; lpLog(t); });
     lpLog("token " + r.token);
     lpLog("pool  " + r.pool);
-    const salida = $("#lpOut");
-    if (salida) {
-      salida.hidden = false;
-      salida.innerHTML = "";
-      const p1 = document.createElement("p");
-      p1.innerHTML = "<b>Launched.</b>";
-      const p2 = document.createElement("p");
-      p2.className = "muted";
-      /* Con textContent y no innerHTML: aqui entran datos que vienen de la
-         cadena y este repo ya se comio un XSS por pintar con innerHTML. */
-      p2.textContent = "token " + r.token + "  ·  pool " + r.pool;
-      salida.appendChild(p1); salida.appendChild(p2);
+    lpResultado(r);
+    /* La direccion se deja escrita en el campo de marcar, que es el paso
+       siguiente y el unico sitio donde hace falta. Se rellena solo si esta
+       vacio: pisar algo que el dueno escribio a mano seria peor. */
+    if (r.token && $("#lpMarkAddr") && !$("#lpMarkAddr").value.trim()) {
+      $("#lpMarkAddr").value = r.token;
     }
-    if (marcar && r.token) {
-      lpLog("marcando como token de plataforma (segunda firma)…");
-      const h = await PAD.marcarComoPlataforma(signer, r.token, (t) => { btn.textContent = t; lpLog(t); });
-      lpLog("marcado: " + h);
-      await lpRevisarPlataforma();
-    }
-    lpLog("listo.");
+    await lpRefrescar();
+    lpLog("done.");
   } catch (e) {
     lpAviso(String(e.message || e));
-    lpLog("PARADO: " + String(e.message || e));
+    lpLog("STOPPED: " + String(e.message || e));
   } finally {
     btn.disabled = false;
     btn.textContent = textoOriginal;
@@ -4527,7 +4674,5 @@ if ($("#lpRun")) {
   $("#lpBuy").addEventListener("input", lpSincronizar);
   lpSincronizar();
   $("#lpRun").addEventListener("click", lpLanzar);
-  $$(".subtab").forEach((s) => s.addEventListener("click", () => {
-    if (s.dataset.sub === "pad") lpRevisarPlataforma();
-  }));
+  $("#lpMark").addEventListener("click", lpMarcar);
 }

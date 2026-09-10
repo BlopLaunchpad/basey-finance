@@ -16,7 +16,7 @@
 <meta name="googlebot" content="noindex, nofollow">
 <!-- Sin `description` a proposito: es lo que un buscador enseña bajo el
      titulo, y aqui no queremos ni titulo ni resumen. -->
-<link rel="stylesheet" href="style.css?v=21">
+<link rel="stylesheet" href="style.css?v=22">
 </head>
 <body>
 
@@ -86,6 +86,7 @@
   <button class="step" data-step="5"><b>5</b> Your liquidity</button>
   <button class="step step-wide" data-step="6"><b>6</b> Launch &amp; manage</button>
   <button class="step" data-step="7"><b>7</b> Wallets</button>
+  <button class="step step-wide" data-step="8"><b>8</b> Our launchpad</button>
 </nav>
 
 <main>
@@ -437,7 +438,6 @@
 
   <div class="subtabs" id="subtabs">
     <button class="subtab is-active" data-sub="launch">Launch a token</button>
-    <button class="subtab" data-sub="pad">Launch on our launchpad</button>
     <button class="subtab" data-sub="manage">What you launched</button>
   </div>
 
@@ -554,69 +554,6 @@
       </div>
     </div>
   </div>
-  <!-- ── 6c · lanzar en NUESTRA lanzadera ──────────────────────────────────
-       Esto NO es el plan a medida de al lado. Ahi tu eliges los tramos de
-       liquidez, los muros y el suelo; aqui la economia la pone el contrato:
-       abre en $5.000, gradua en $50.000, comision del 1% y reparto 80/20.
-       Son dos productos distintos y por eso son dos pestañas. -->
-  <div data-subpanel="pad" hidden>
-    <div class="cols">
-      <div class="col-form">
-
-        <h2>Identity</h2>
-        <div class="grid2">
-          <label class="field"><span>Name</span><input id="lpName" type="text" placeholder="My Coin" maxlength="60"></label>
-          <label class="field"><span>Symbol</span><input id="lpSym" type="text" placeholder="MYC" maxlength="20"></label>
-        </div>
-        <div class="grid2">
-          <label class="field"><span>Image URL</span><input id="lpImage" type="text" placeholder="https://… or ipfs://…"></label>
-          <label class="field"><span>Website</span><input id="lpWeb" type="text" placeholder="https://…"></label>
-          <label class="field"><span>X / Twitter</span><input id="lpTw" type="text" placeholder="https://x.com/…"></label>
-          <label class="field"><span>Telegram</span><input id="lpTg" type="text" placeholder="https://t.me/…"></label>
-        </div>
-        <label class="field"><span>Description</span><input id="lpDesc" type="text" maxlength="300" placeholder="One sentence."></label>
-
-        <h2>Size and burn</h2>
-        <div class="grid2">
-          <label class="field"><span>Supply</span><input id="lpSupply" type="text" value="1000000000">
-            <small>Whole tokens. The contract adds 18 decimals.</small></label>
-          <label class="field"><span>Your fees that get burned</span><input id="lpBurn" type="text" value="0">
-            <small>Percent of <b>your own</b> 80% share. 0 keeps it all; 100 burns it all.</small></label>
-        </div>
-
-        <h2>Atomic first buy</h2>
-        <label class="field"><span>USDC to spend in the same transaction</span><input id="lpBuy" type="text" value="0">
-          <small>Optional. It buys at the opening price, before anyone else can. 0 to skip.</small></label>
-        <label class="field" id="lpMinBox" hidden><span>Minimum tokens to accept</span><input id="lpMinOut" type="text" value="1">
-          <small>The contract refuses a buy with no minimum, so this cannot be zero.</small></label>
-
-        <!-- Solo sale con la wallet de la plataforma conectada, y solo mientras
-             la lanzadera no tenga ya token. `setPlatformToken` lleva
-             `require(cuspToken == address(0))`: no hay segunda oportunidad. -->
-        <label class="radio" id="lpPlatBox" hidden>
-          <input type="checkbox" id="lpPlat">
-          <span><b>Make this the platform token</b> — after the launch it will be marked with
-          <code>setPlatformToken</code>. <b>This cannot be undone</b>, and only the first one counts.</span>
-        </label>
-
-        <div class="warn" id="lpWarn" hidden></div>
-        <button class="btn primary" id="lpRun">Launch on the launchpad</button>
-        <div class="cost" id="lpCost">Opens at $5,000 · graduates at $50,000 · 1% pool fee · 80% you / 20% platform</div>
-        <pre class="log" id="lpLog" hidden></pre>
-      </div>
-
-      <div class="col-side">
-        <h2>What this does</h2>
-        <p class="muted">One transaction creates the token, opens its Uniswap pool and puts the
-        liquidity in. You do not choose the ranges: the launchpad does.</p>
-        <p class="muted">The launchpad is <code id="lpAddr"></code> — the same bytecode as the
-        Cusp factory, checked byte for byte, with its own fee wallet.</p>
-        <div id="lpOut" hidden></div>
-      </div>
-    </div>
-  </div>
-
-
 </section>
 
 
@@ -799,6 +736,93 @@
   <div class="log" id="trLog" hidden></div>
 </section>
 
+<!-- ─────────────────── 8 · OUR LAUNCHPAD ────────────────── -->
+<!-- ESTO NO ES EL PASO 6, y por eso es un paso aparte y no una pestana de al
+     lado. En el 6 armas un token a medida: eliges los tramos de liquidez, los
+     muros y el suelo. Aqui no eliges nada de eso, la economia la pone el
+     contrato. Estuvieron juntos un dia y confundia.
+
+     FIRMA LA CARTERA RAPIDA. `signer` empieza siendo la wallet inyectada y
+     solo pasa a ser la rapida cuando alguien la deriva en el paso 7. La
+     lanzadera tiene de dueno esa misma direccion, asi que lanzar y marcar no
+     abren ninguna ventana. Sin rapida derivada firmaria la principal, que NO
+     es el dueno, y la marca revertiria con NotOwner DESPUES de haber gastado
+     el lanzamiento: por eso el panel lo comprueba y lo dice antes. -->
+<section class="panel" data-panel="8" hidden>
+
+  <h2>Our launchpad</h2>
+  <p class="lede">
+    One transaction creates the coin, opens its Uniswap pool and puts the
+    liquidity in. You do not pick the ranges, the walls or the floor: the
+    contract does. It opens at $5,000, graduates at $50,000, charges 1% and
+    splits the fees 80% to you and 20% to the platform.
+  </p>
+
+  <div class="note" id="lpEstado"><p>Reading the launchpad…</p></div>
+
+  <div class="cols">
+    <div class="col-form">
+
+      <h2>Identity</h2>
+      <div class="grid2">
+        <label class="field"><span>Name</span><input id="lpName" type="text" placeholder="My Coin" maxlength="60"></label>
+        <label class="field"><span>Symbol</span><input id="lpSym" type="text" placeholder="MYC" maxlength="20"></label>
+      </div>
+      <div class="grid2">
+        <label class="field"><span>Image URL</span><input id="lpImage" type="text" placeholder="https://… or ipfs://…"></label>
+        <label class="field"><span>Website</span><input id="lpWeb" type="text" placeholder="https://…"></label>
+        <label class="field"><span>X / Twitter</span><input id="lpTw" type="text" placeholder="https://x.com/…"></label>
+        <label class="field"><span>Telegram</span><input id="lpTg" type="text" placeholder="https://t.me/…"></label>
+      </div>
+      <label class="field"><span>Description</span><input id="lpDesc" type="text" maxlength="300" placeholder="One sentence."></label>
+
+      <h2>Size and burn</h2>
+      <div class="grid2">
+        <label class="field"><span>Supply</span><input id="lpSupply" type="text" value="1000000000">
+          <small>Whole tokens. The contract adds 18 decimals.</small></label>
+        <label class="field"><span>Your fees that get burned</span><input id="lpBurn" type="text" value="0">
+          <small>Percent of <b>your own</b> 80% share. 0 keeps it all; 100 burns it all.</small></label>
+      </div>
+
+      <h2>Atomic first buy</h2>
+      <label class="field"><span>USDC to spend in the same transaction</span><input id="lpBuy" type="text" value="0">
+        <small>Optional. It buys at the opening price, before anyone else can. 0 to skip.</small></label>
+      <label class="field" id="lpMinBox" hidden><span>Minimum tokens to accept</span><input id="lpMinOut" type="text" value="1">
+        <small>The contract refuses a buy with no minimum, so this cannot be zero.</small></label>
+
+      <div class="warn" id="lpWarn" hidden></div>
+      <button class="btn btn-primary btn-big" id="lpRun">Launch the coin</button>
+      <div class="cost" id="lpCost">Opens at $5,000 · graduates at $50,000 · 1% pool fee · 80% you / 20% platform</div>
+      <pre class="log" id="lpLog" hidden></pre>
+      <div class="note" id="lpOut" hidden></div>
+
+      <h2>Platform token</h2>
+      <p class="muted">
+        The launchpad has one platform token and it is set once.
+        <code>setPlatformToken</code> carries
+        <code>require(cuspToken == address(0))</code>, so there is no second
+        attempt and no way back. Launching above fills this in for you.
+      </p>
+      <label class="field"><span>Token address</span><input id="lpMarkAddr" type="text" placeholder="0x…" autocomplete="off">
+        <small>It has to be a coin launched from this launchpad.</small></label>
+      <div class="warn" id="lpMarkWarn" hidden></div>
+      <button class="btn" id="lpMark">Mark it as the platform token</button>
+      <pre class="log" id="lpMarkLog" hidden></pre>
+    </div>
+
+    <div class="col-side">
+      <div class="note">
+        <h3>Where the liquidity sits</h3>
+        <p>The pool holds it from the first block and the launchpad holds the position, so you are not left with an NFT to manage. That is also why nothing launched here shows up under step 6.</p>
+        <h3>The contract</h3>
+        <p>The launchpad is <code id="lpAddr"></code>. The same bytecode as the Cusp factory on mainnet, checked byte for byte, with its own fee wallet.</p>
+        <h3>Who signs</h3>
+        <p id="lpQuienFirma">Your fast wallet signs both buttons, so neither opens a popup.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 </main>
 
 <footer class="foot">
@@ -813,6 +837,6 @@
 
 
 
-<script type="module" src="app.js?v=45"></script>
+<script type="module" src="app.js?v=46"></script>
 </body>
 </html>

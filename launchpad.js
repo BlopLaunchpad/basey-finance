@@ -1,9 +1,10 @@
 /* LANZAR EN NUESTRA PROPIA LANZADERA.
  *
- * El panel 6 pasa de armar un token a medida --con sus tramos de liquidez, sus
- * muros y su suelo-- a lanzar en la Factory que desplegamos el 10-sep. Son dos
- * productos distintos y conviene tenerlo claro: aqui la economia la pone el
- * contrato, no el plan.
+ * ESTO ES EL PASO 8, NO EL 6. El 6 arma un token a medida --sus tramos de
+ * liquidez, sus muros, su suelo--; aqui la economia la pone la Factory que
+ * desplegamos el 10-sep y no se elige nada de eso. Estuvieron juntos un dia,
+ * como dos pestanas del paso 6, y confundia: la tira los presentaba como la
+ * misma decision con dos sabores. Son dos productos.
  *
  * LA LANZADERA
  *   0xaF3D9734b6270641237EDCc54a44Db77BDe0B0a4
@@ -18,8 +19,9 @@
  *   `setPlatformToken` (en el fuente, `setCuspToken`) es `onlyOwner`, y una
  *   cartera normal solo puede llamar a UNA funcion por transaccion. Asi que
  *   "crear el token y marcarlo en la misma transaccion" no es posible desde
- *   una wallet corriente. Lo que hace este modulo es DOS FIRMAS SEGUIDAS con
- *   un solo boton: lanza, espera el recibo, y marca.
+ *   una wallet corriente. Son DOS FIRMAS y ahora tambien DOS BOTONES: uno
+ *   lanza y el otro marca. Con un solo boton, si la segunda firma fallaba te
+ *   quedabas sin saber si el token quedo puesto o no.
  *
  *   La alternativa seria que el dueño de la Factory fuera un contrato
  *   intermedio que llamara a las dos. Eso significa entregarle la propiedad de
@@ -103,6 +105,35 @@ export async function yaHayTokenDePlataforma(proveedor) {
   }
 }
 
+/* EL DUENO NO ES LA WALLET DE PLATAFORMA, aunque hoy sean la misma
+   direccion. `setCuspToken` es `onlyOwner`; `platformWallet` es solo quien
+   cobra. Preguntar por la equivocada dejaria el boton de marcar habilitado
+   para alguien que no puede llamarla, y saldria como un revert sin motivo. */
+export async function esElDueno(cuenta, proveedor) {
+  if (!cuenta) return false;
+  try {
+    const o = await contrato(proveedor).owner();
+    return String(o).toLowerCase() === String(cuenta).toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
+/* TODO EL ESTADO DE UNA VEZ, para que la pantalla tenga UNA sola fuente y no
+   cinco lecturas que puedan contradecirse. Si falla, falla entera: media
+   verdad pintada es peor que decir que no se pudo leer. */
+export async function estado(proveedor) {
+  const c = contrato(proveedor);
+  const [dueno, plataforma, token, cuantos, pausada] = await Promise.all([
+    c.owner(), c.platformWallet(), c.cuspToken(), c.launchCount(), c.launchesPaused(),
+  ]);
+  return {
+    dueno, plataforma, token, pausada,
+    lanzamientos: Number(cuantos),
+    tienePlataforma: !/^0x0+$/i.test(String(token)),
+  };
+}
+
 /* El JSON que va dentro de `metadataURI`. Las claves son las que lee el indexer
    que ya existe; inventarse otras dejaria la moneda sin redes ni imagen en la
    ficha, sin ningun error visible. */
@@ -114,7 +145,7 @@ export function metadata({ description, website, twitter, telegram, image }) {
   if (telegram) o.telegram = String(telegram);
   if (image) o.image = String(image);
   const s = JSON.stringify(o);
-  if (s.length > LIMITES.metadataMax) throw new Error("La metadata pasa de 60.000 caracteres.");
+  if (s.length > LIMITES.metadataMax) throw new Error("The metadata is over 60,000 characters.");
   return s;
 }
 
@@ -122,19 +153,19 @@ export function metadata({ description, website, twitter, telegram, image }) {
    usuario. Cada regla es un `require` del contrato, no una opinion. */
 export function revisar(p) {
   const malo = [];
-  if (!p.name || p.name.length > LIMITES.nombreMax) malo.push("El nombre va de 1 a 60 caracteres.");
-  if (!p.symbol || p.symbol.length > LIMITES.simboloMax) malo.push("El simbolo va de 1 a 20 caracteres.");
-  if (!(p.supply > 0n)) malo.push("El supply tiene que ser mayor que cero.");
-  if (p.supply > LIMITES.supplyMax) malo.push("El supply pasa del maximo del contrato.");
+  if (!p.name || p.name.length > LIMITES.nombreMax) malo.push("The name has to be 1 to 60 characters.");
+  if (!p.symbol || p.symbol.length > LIMITES.simboloMax) malo.push("The symbol has to be 1 to 20 characters.");
+  if (!(p.supply > 0n)) malo.push("The supply has to be greater than zero.");
+  if (p.supply > LIMITES.supplyMax) malo.push("The supply is over the contract maximum.");
   if (!(p.creatorBurnBps >= 0 && p.creatorBurnBps <= LIMITES.burnBpsMax))
-    malo.push("La parte a quemar va de 0 a 100%.");
-  if (p.initialBuyPair < 0n) malo.push("La compra inicial no puede ser negativa.");
+    malo.push("The share to burn goes from 0 to 100%.");
+  if (p.initialBuyPair < 0n) malo.push("The first buy cannot be negative.");
   /* `_buy` lleva `require(pairIn != 0 && minTokensOut != 0, "INPUT")`. O sea
      que con compra atomica, un minimo de cero REVIERTE. Lo dice el contrato,
      no yo, y la primera version de este fichero lo dejaba en cero por defecto:
      habria fallado en la firma con un "INPUT" que no explica nada. */
   if (p.initialBuyPair > 0n && !(p.minTokensOut > 0n))
-    malo.push("Con compra inicial hay que poner un minimo de tokens mayor que cero.");
+    malo.push("With a first buy, the minimum tokens has to be greater than zero.");
   return malo;
 }
 
@@ -153,8 +184,8 @@ export async function lanzar(signer, p, avisar = () => {}) {
     p.feeRecipient || cuenta, p.initialBuyPair, p.minTokensOut || 0n, deadline,
   ];
 
-  avisar("Comprobando que la lanzadera acepta esto…");
-  if (await c.launchesPaused()) throw new Error("La lanzadera esta pausada ahora mismo.");
+  avisar("Checking that the launchpad accepts this…");
+  if (await c.launchesPaused()) throw new Error("The launchpad is paused right now.");
 
   /* LA COMPRA ATOMICA NO SE PAGA CON `value`: `launchWithSupply` NO ES PAYABLE.
      `_buy` hace `safeTransferFrom(pairToken, buyer, ...)`, o sea que cobra el
@@ -170,23 +201,23 @@ export async function lanzar(signer, p, avisar = () => {}) {
     const usdc = new ethers.Contract(USDC, ERC20_ABI, signer);
     const permitido = await usdc.allowance(cuenta, FACTORY);
     if (permitido < p.initialBuyPair) {
-      avisar("Aprobando el USDC de la compra inicial…");
+      avisar("Approving the USDC for the first buy…");
       const ta = await usdc.approve(FACTORY, p.initialBuyPair);
       await ta.wait();
     }
   }
 
-  avisar("Simulando el lanzamiento…");
+  avisar("Simulating the launch…");
   let previsto;
   try {
     previsto = await c.launchWithSupply.staticCall(...args);
   } catch (e) {
-    throw new Error("El lanzamiento revertiria: " + (e.shortMessage || e.message || e));
+    throw new Error("The launch would revert: " + (e.shortMessage || e.message || e));
   }
 
-  avisar("Confirma el lanzamiento en tu wallet…");
+  avisar("Signing the launch…");
   const tx = await c.launchWithSupply(...args);
-  avisar("Esperando a que entre en la cadena…");
+  avisar("Waiting for it to land…");
   const rec = await tx.wait();
 
   /* La direccion sale del EVENTO, no de la simulacion: entre simular y minar
@@ -208,15 +239,15 @@ export async function marcarComoPlataforma(signer, token, avisar = () => {}) {
   const c = contrato(signer);
   const yaEsta = await c.cuspToken();
   if (!/^0x0+$/i.test(String(yaEsta))) {
-    throw new Error("Esta lanzadera ya tiene token de plataforma (" + yaEsta + ") y no se puede cambiar.");
+    throw new Error("This launchpad already has a platform token (" + yaEsta + ") and it cannot be changed.");
   }
-  avisar("Simulando la marca…");
+  avisar("Simulating the mark…");
   try {
     await c.setCuspToken.staticCall(token);
   } catch (e) {
-    throw new Error("No se puede marcar: " + (e.shortMessage || e.message || e));
+    throw new Error("Cannot mark it: " + (e.shortMessage || e.message || e));
   }
-  avisar("Confirma la marca en tu wallet. Esto NO se puede deshacer…");
+  avisar("Signing the mark. This cannot be undone…");
   const tx = await c.setCuspToken(token);
   await tx.wait();
   return tx.hash;
