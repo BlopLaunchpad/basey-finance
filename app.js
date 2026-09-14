@@ -23,16 +23,19 @@ import { planPorDefecto, resumen as planResumen, avisosDe, precioDe,
          posicionesDe, sobranteDe, MCAP_POR_DEFECTO } from "./plan.js?v=7";
 import { V4, V4_TIERS, POSM_ABI, STATEVIEW_ABI, poolKey, poolId, liquidityFor,
          encodeMint, permit2Steps, HOOK_NOTE } from "./v4.js?v=1";
+import { crearProveedorRotativo, NODOS_ARC } from "./rpc.js?v=1";
 
 const SOLC = "https://binaries.soliditylang.org/bin/soljson-v0.8.24+commit.e11b9ed9.js";
 
 /* Arc's public nodes are unreliable by the hour — measured at 48% of a day with
- * nothing answering — so this list is rotated through and a dead node is
+ * nothing answering — so no read is tied to one node, and a dead node is
  * skipped, never cached as "the answer". */
-const FALLBACK_RPCS = [
-  "https://rpc.arc-scan.org",
-  "https://niorfun.com/api/rpc",
-];
+/* The list lives in rpc.js since 2026-09-14 (NODOS_ARC), in priority order,
+ * beside the measurements that chose it. rawCall below no longer walks a copy
+ * of its own: it goes through the provider's order, clocks and penalty box, so
+ * a node the provider has just seen hang is not waited on again. Review of
+ * 14-sep: with thecusp blocked, every rawCall that met arc-scan's 503 sat out
+ * a 12 s timeout on thecusp before reaching the next node. */
 /* Measured from a browser on 2026-09-02, which is not the same test as from a
  * server: brc.exchange sends no CORS headers, so a page can never reach it, and
  * ac-rpc.theleak.cx answers 409 "client packet length exceeds 255 buffer" to
@@ -115,7 +118,16 @@ const etiquetaFila = (i) => (esMadre(i) ? "main" : "#" + i);
 
 function proveedorRPC() {
   if (!provRPC) {
-    provRPC = new ethers.JsonRpcProvider(FALLBACK_RPCS[0], ARC.chainId, { staticNetwork: true });
+    /* YA NO SE CASA CON UN NODO.  (14-sep-2026)
+     * Esto era `new ethers.JsonRpcProvider(FALLBACK_RPCS[0], ...)`: la rapida,
+     * el cluster, el Quoter y los recibos iban SOLO a rpc.arc-scan.org. Ese
+     * dia, en pleno pico de volumen, arc-scan contesto HTTP 503 a 28 de 96 de
+     * las llamadas que hacen una retirada y una compra, y ethers lo pinta como
+     * "server response 503": el "error 500" que no dejaba sacar los 80 de la
+     * rapida ni comprar. rawCall ya rotaba y los saldos se veian, por eso
+     * parecia puntual. Que se reintenta y que no --sobre todo al enviar-- esta
+     * en rpc.js, y probado contra este mismo codigo en tools/test-rpc.mjs. */
+    provRPC = crearProveedorRotativo(ethers, NODOS_ARC, { chainId: ARC.chainId });
     /* Arc hace un bloque cada 0,5 s -- medido. El defecto de ethers es 4.000 ms,
      * asi que esperar una confirmacion costaba ocho bloques de no enterarse. */
     provRPC.pollingInterval = 500;
@@ -127,31 +139,19 @@ let metaA = null, metaB = null;
 /* ── chain plumbing ─────────────────────────────────────────────────── */
 
 /* Kept for anything that genuinely needs a Provider object. Reads should use
- * callRead instead -- an ethers provider talks to one node and this chain
- * cannot be relied on to have one. */
+ * callRead instead: it asks the connected wallet first. Without a wallet this
+ * used to build a provider pinned to FALLBACK_RPCS[0]; it now hands out the
+ * rotating one from rpc.js, so no provider in this file is tied to one node. */
 function readProvider() {
-  return provider || new ethers.JsonRpcProvider(FALLBACK_RPCS[0], ARC.chainId, { staticNetwork: true });
+  return provider || proveedorRPC();
 }
 
 async function rawCall(method, params) {
-  let last = null;
-  if (provider) { try { return await provider.send(method, params); } catch (e) { last = e; } }
-  for (const url of FALLBACK_RPCS) {
-    try {
-      const res = await fetch(url, {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        signal: AbortSignal.timeout(12000),
-      });
-      if (!res.ok) continue;
-      const j = await res.json();
-      if (j.error || j.result === undefined) continue;
-      return j.result;
-    } catch (e) { last = e; }
-  }
-  const err = new Error("no node answered — Arc's public RPCs are down for this call");
-  err.noNode = true;
-  throw err;
+  if (provider) { try { return await provider.send(method, params); } catch { /* the public nodes next */ } }
+  /* Same promise as ever: any error or missing result moves on to the next
+   * node, and when none answers the error carries noNode (readToken reads it).
+   * What changed is who walks the list -- see leerCrudo in rpc.js. */
+  return proveedorRPC().leerCrudo(method, params);
 }
 
 /* Every read goes through here, so every read gets the wallet-then-rotate
