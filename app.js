@@ -24,6 +24,7 @@ import { planPorDefecto, resumen as planResumen, avisosDe, precioDe,
 import { V4, V4_TIERS, POSM_ABI, STATEVIEW_ABI, poolKey, poolId, liquidityFor,
          encodeMint, permit2Steps, HOOK_NOTE } from "./v4.js?v=1";
 import { crearProveedorRotativo, NODOS_ARC } from "./rpc.js?v=1";
+import * as MOTOR from "./motor-rutas.js?v=1";
 
 const SOLC = "https://binaries.soliditylang.org/bin/soljson-v0.8.24+commit.e11b9ed9.js";
 
@@ -3266,6 +3267,13 @@ async function pintarClúster() {
       for (const i of conSaldo) {
         acumulado += toks[i];
         try {
+          if (trToken.motor) {
+            /* V4 y puentes: la misma venta acumulada, cotizada por el motor. */
+            const hasta = await ventaPorMotor(acumulado);
+            vals[i] = Math.max(0, hasta - previo);
+            previo = hasta;
+            continue;
+          }
           const o = await cotizar(trToken.address, QUOTE.address, acumulado, trToken.fee);
           const hasta = Number(ethers.formatUnits(o, QUOTE.decimals));
           vals[i] = Math.max(0, hasta - previo);
@@ -3626,9 +3634,13 @@ let trToken = null;   // { address, symbol, decimals, fee, pool }
  * Quoter dice lo que de verdad te darian, que es el unico precio que importa
  * cuando vas a vender. Se pide UNA vez por refresco y vale para las tarjetas. */
 let mercado = null;   // { precio, mcap, supply }
+/* El motor de rutas (V4, hooks de Arguspad y puentes), creado la primera vez
+ * que una moneda no tiene pool V3 contra USDC. Ver motor-rutas.js. */
+let motorRutas = null;
 
 async function leerMercado() {
   if (!trToken) { mercado = null; return null; }
+  if (trToken.motor) return leerMercadoPorMotor();
   try {
     /* Con un dolar, para que el propio deslizamiento no falsee el precio: una
      * cotizacion grande devuelve el precio DESPUES de moverlo. */
@@ -3684,7 +3696,8 @@ async function leerTokenDeCompra() {
       pintarClúster(); return;
     }
     const p = await buscarPool(dir);
-    if (!p) { info.textContent = m.symbol + " has no pool against USDC on this factory — nothing to trade."; pintarClúster(); return; }
+    /* Sin pool V3 contra USDC: V4, Arguspad y puentes, por el motor. */
+    if (!p) { await leerTokenPorMotor(dir, m, info); pintarClúster(); return; }
     trToken = { address: ethers.getAddress(dir), symbol: m.symbol, decimals: m.decimals, fee: p.fee, pool: p.pool };
     monedaRecordar(trToken);
     memGuardar();
@@ -3736,6 +3749,125 @@ async function permisoSuficiente(w, token, cuánto) {
   await tx.wait();
 }
 
+/* ── V4, HOOKS DE ARGUSPAD Y PUENTES, POR EL MOTOR DE RUTAS ─────────────
+ *
+ * Lo que no tiene pool V3 contra USDC ya no se queda en "nothing to trade": se
+ * busca en V4 (USDC nativo o ERC-20), en los lanzamientos de Arguspad (con la
+ * prueba del hook en cadena) y por los puentes de long.supply, y se opera por
+ * el UniversalRouter con rutas.js. Todo lo de dentro esta en motor-rutas.js.
+ *
+ * LO DE V3 NO CAMBIA: si buscarPool() encuentra la pool, la moneda va por el
+ * Quoter y el SwapRouter02 de siempre. Esto solo entra cuando no la encuentra.
+ *
+ * SIN COMISION: el 1% del motor va a MSG_SENDER y vuelve a la misma cartera en
+ * la misma transaccion (motor-rutas.js, y la prueba en tools/probar-motor.mjs). */
+function motorDeRutas() {
+  if (!motorRutas) motorRutas = MOTOR.crearMotorPropio(ethers, window.Rutas, proveedorRPC());
+  return motorRutas;
+}
+
+async function leerTokenPorMotor(dir, m, info) {
+  info.textContent = m.symbol + " has no V3 pool against USDC — looking for V4 pools, an Arguspad launch and bridges…";
+  let d;
+  try {
+    d = await MOTOR.descubrir({ ethers, Rutas: window.Rutas, motor: motorDeRutas(), provider: proveedorRPC(), token: dir });
+  } catch (e) {
+    info.textContent = m.symbol + " has no V3 pool against USDC, and the V4 and bridge search failed: " + readableError(e);
+    return;
+  }
+  /* Se ha pegado otra moneda mientras se buscaba: esta respuesta ya no es de nadie. */
+  const ahora = resolverMoneda($("#trToken").value);
+  if (!ahora || ahora.toLowerCase() !== dir.toLowerCase()) return;
+  if (!d.rutas.length) { info.textContent = m.symbol + ": " + MOTOR.motivoSinRuta(d); return; }
+  trToken = { address: ethers.getAddress(dir), symbol: m.symbol, decimals: m.decimals, fee: null, pool: null, motor: d };
+  monedaRecordar(trToken);
+  memGuardar();
+  await leerMercado();
+  info.textContent = m.symbol + " · " + m.decimals + " decimals · " + MOTOR.textoRuta(d.rutas[0], "compra", m.symbol) +
+    (d.rutas.length > 1 ? " · " + d.rutas.length + " routes, the best one is quoted before every trade" : "") +
+    " · Uniswap router, no fee";
+}
+
+/* El precio con un dolar, como en V3. De ese dolar el router opera 0,99 (el 1%
+ * vuelve a la cartera), asi que el precio sale de lo operado, no del dolar. */
+async function leerMercadoPorMotor() {
+  const t = trToken;
+  try {
+    const cot = await MOTOR.mejorCotizacion({ motor: motorDeRutas(), rutas: t.motor.rutas, lado: "compra", cantidad: ethers.parseUnits("1", QUOTE.decimals) });
+    const tokens = Number(ethers.formatUnits(cot.sale, t.decimals));
+    const usdc = MOTOR.usdcGastado(ethers, cot);
+    if (!isFinite(tokens) || tokens <= 0 || !(usdc > 0)) { mercado = null; return null; }
+    const precio = usdc / tokens;
+    let supply = null;
+    try {
+      const [ts] = await callRead(t.address, ERC20_ABI, "totalSupply");
+      supply = Number(ethers.formatUnits(ts, t.decimals));
+    } catch { /* sin supply no hay capitalizacion, y se dice */ }
+    if (trToken !== t) return mercado;   // se cambio de moneda mientras tanto
+    mercado = { precio, supply, mcap: supply ? precio * supply : null };
+    return mercado;
+  } catch { mercado = null; return null; }
+}
+
+/* Lo que daria vender `cantidad` ahora, en USDC. La salida entera: el 1% del
+ * router tambien vuelve a la cartera. */
+async function ventaPorMotor(cantidad) {
+  const cot = await MOTOR.mejorCotizacion({ motor: motorDeRutas(), rutas: trToken.motor.rutas, lado: "venta", cantidad });
+  return MOTOR.usdcDeVenta(ethers, cot);
+}
+
+/* UNA cartera, por el motor. No lanza nunca: como en V3, una cartera que falla
+ * no para a las demas. Cotiza justo antes de SU operacion, dentro de operar.
+ * `t` es la moneda que fijo el lote al empezar, y aqui NUNCA se lee `trToken`:
+ * el campo sigue abierto mientras el lote corre (ver operarConElClúster). */
+async function operarUnaConMotor(esCompra, t, { i, w, cantidad, slippage }, log) {
+  const fila = "  " + etiquetaFila(i) + ": ";
+  try {
+    let amountIn;
+    if (esCompra) {
+      amountIn = ethers.parseUnits(String(cantidad), QUOTE.decimals);
+    } else {
+      /* Vender es TODO lo que tenga, igual que en V3. */
+      const c = new ethers.Contract(t.address, ERC20_ABI, proveedorRPC());
+      amountIn = await c.balanceOf(w.address);
+      if (amountIn === 0n) { log(fila + "holds none, skipped"); return; }
+    }
+    const r = await MOTOR.operar({
+      ethers, Rutas: window.Rutas, motor: motorDeRutas(), firmante: w, rutas: t.motor.rutas,
+      lado: esCompra ? "compra" : "venta", cantidad: amountIn, slippageBps: Math.round(slippage * 100),
+      simbolo: t.symbol, decimales: t.decimals, avisar: (txt) => log(fila + txt),
+    });
+    /* Se apunta DESPUES de confirmar, como en V3. Al comprar, lo que salio de
+     * verdad: la entrada menos el 1% que volvio. */
+    if (esCompra) {
+      costeAnotar(w.address, t.address, MOTOR.usdcGastado(ethers, r.plan.cot), 0);
+    } else {
+      /* Lo que VOLVIO, del recibo: en una ruta de USDC ERC-20 son DOS Transfer a
+       * la cartera (el 1% y el resto) y se suman. En una nativa no se lee: se
+       * apunta lo cotizado, que es lo mejor que se sabe. */
+      let vuelta = null;
+      if (!r.plan.cot.ruta.nativo) {
+        try {
+          const T = ethers.id("Transfer(address,address,uint256)");
+          const yo = "0x" + w.address.slice(2).toLowerCase().padStart(64, "0");
+          let suma = 0n;
+          for (const l of (r.recibo && r.recibo.logs) || []) {
+            if (String(l.address).toLowerCase() !== QUOTE.address.toLowerCase()) continue;
+            if (l.topics[0] !== T || l.topics.length < 3) continue;
+            if (String(l.topics[2]).toLowerCase() !== yo) continue;
+            suma += BigInt(l.data);
+          }
+          if (suma > 0n) vuelta = Number(ethers.formatUnits(suma, QUOTE.decimals));
+        } catch { /* se cae a lo cotizado */ }
+      }
+      costeAnotar(w.address, t.address, 0, vuelta !== null ? vuelta : MOTOR.usdcDeVenta(ethers, r.plan.cot));
+    }
+    log(fila + "done", "ok");
+  } catch (e) {
+    log(fila + readableError(e), "err");
+  }
+}
+
 async function operarConElClúster(esCompra, solo) {
   const log = logger("trLog");
   const btns = [$("#trBuy"), $("#trSell")];
@@ -3747,16 +3879,44 @@ async function operarConElClúster(esCompra, solo) {
     if (!lista.length) throw new Error(solo ? "that wallet has no amount set" : "no wallet is ticked");
     const espera = Math.max(0, Number($("#trGap").value) || 0);
 
-    const entra = esCompra ? QUOTE.address : trToken.address;
-    const sale = esCompra ? trToken.address : QUOTE.address;
-    const decEntra = esCompra ? QUOTE.decimals : trToken.decimals;
-    const decSale = esCompra ? trToken.decimals : QUOTE.decimals;
+    /* LA MONEDA DEL LOTE SE FIJA AQUI, UNA VEZ, y todo lo de abajo lee `tok`.
+     * El campo de la moneda sigue abierto mientras el lote corre, y leer el
+     * global en cada cartera hacia que, pegando otra direccion en el hueco
+     * entre dos, las que quedaban compraran o vendieran LA NUEVA con la cantidad
+     * de su tarjeta, bajo una cabecera que decia la vieja. Cazado con carteras
+     * simuladas: la segunda compro 0x897c en un lote de ARCX10. Prueba en
+     * tools/probar-lote.mjs. */
+    const tok = trToken;
+    const entra = esCompra ? QUOTE.address : tok.address;
+    const sale = esCompra ? tok.address : QUOTE.address;
+    const decEntra = esCompra ? QUOTE.decimals : tok.decimals;
+    const decSale = esCompra ? tok.decimals : QUOTE.decimals;
 
-    log(lista.length + (esCompra ? " buying " : " selling ") + trToken.symbol +
+    log(lista.length + (esCompra ? " buying " : " selling ") + tok.symbol +
         (espera ? " · " + espera + "s apart" : " · back to back"));
 
+    let parado = false;
     for (let k = 0; k < lista.length; k++) {
       const { i, w, cantidad, slippage } = lista[k];
+      /* Si el campo ha cambiado desde que empezo, el lote SE PARA y lo dice.
+       * Seguir con la vieja seria operar lo que ya no esta en pantalla, y
+       * seguir con la nueva es el fallo de arriba. Cuenta cualquier cambio,
+       * tambien volver a pegar la misma (es otro objeto): parar de mas cuesta
+       * pulsar otra vez; operar la moneda que no era no se deshace. */
+      if (trToken !== tok) {
+        log("stopped: the token field changed while " + (esCompra ? "buying " : "selling ") + tok.symbol +
+            " — " + (lista.length - k) + " wallet(s) left untouched", "err");
+        parado = true;
+        break;
+      }
+      /* V4 Y PUENTES, POR EL MOTOR (ver operarUnaConMotor), con la moneda del
+       * lote. Lo de abajo, V3, no cambia salvo que lee `tok`. El hueco entre
+       * carteras es el mismo. */
+      if (tok.motor) {
+        await operarUnaConMotor(esCompra, tok, { i, w, cantidad, slippage }, log);
+        if (espera && k < lista.length - 1) await new Promise((s) => setTimeout(s, espera * 1000));
+        continue;
+      }
       try {
         let amountIn;
         if (esCompra) {
@@ -3764,7 +3924,7 @@ async function operarConElClúster(esCompra, solo) {
         } else {
           /* Vender es TODO lo que tenga: pedir una cantidad de un token cuyo
            * saldo no sabes de memoria es como se firma una venta que revierte. */
-          const c = new ethers.Contract(trToken.address, ERC20_ABI, proveedorRPC());
+          const c = new ethers.Contract(tok.address, ERC20_ABI, proveedorRPC());
           amountIn = await c.balanceOf(w.address);
           if (amountIn === 0n) { log("  " + etiquetaFila(i) + ": holds none, skipped"); continue; }
         }
@@ -3773,7 +3933,7 @@ async function operarConElClúster(esCompra, solo) {
          * Todas caen en la misma pool una detras de otra: la segunda compra a
          * peor precio que la primera, y un presupuesto tomado antes de empezar
          * seria mentira para todas menos la primera. */
-        const esperado = await cotizar(entra, sale, amountIn, trToken.fee);
+        const esperado = await cotizar(entra, sale, amountIn, tok.fee);
         const minOut = (esperado * BigInt(Math.round((100 - slippage) * 100))) / 10000n;
         log("  " + etiquetaFila(i) + ": " + ethers.formatUnits(amountIn, decEntra) + " → " +
             Number(ethers.formatUnits(esperado, decSale)).toLocaleString("es") +
@@ -3782,14 +3942,14 @@ async function operarConElClúster(esCompra, solo) {
         await permisoSuficiente(w, entra, amountIn);
         const r = new ethers.Contract(ARC_SWAP_ROUTER, ROUTER_ABI, w);
         const tx = await r.exactInputSingle({
-          tokenIn: entra, tokenOut: sale, fee: trToken.fee,
+          tokenIn: entra, tokenOut: sale, fee: tok.fee,
           recipient: w.address, amountIn, amountOutMinimum: minOut, sqrtPriceLimitX96: 0n,
         });
         await tx.wait();
         /* Se apunta DESPUES de confirmar, no antes: una compra que revierte no
          * puede dejar un coste apuntado que luego mienta en el porcentaje. */
         if (esCompra) {
-          costeAnotar(w.address, trToken.address, Number(ethers.formatUnits(amountIn, decEntra)), 0);
+          costeAnotar(w.address, tok.address, Number(ethers.formatUnits(amountIn, decEntra)), 0);
         } else {
           /* Lo que VOLVIO de la venta, no lo que se mandó: se lee del recibo.
            * Si no se puede leer se apunta lo cotizado, que es lo mejor que se
@@ -3807,7 +3967,7 @@ async function operarConElClúster(esCompra, solo) {
               break;
             }
           } catch { /* se cae a lo cotizado */ }
-          costeAnotar(w.address, trToken.address, 0,
+          costeAnotar(w.address, tok.address, 0,
                       vuelta !== null ? vuelta : Number(ethers.formatUnits(esperado, decSale)));
         }
         log("  " + etiquetaFila(i) + ": done", "ok");
@@ -3819,7 +3979,7 @@ async function operarConElClúster(esCompra, solo) {
       }
       if (espera && k < lista.length - 1) await new Promise((s) => setTimeout(s, espera * 1000));
     }
-    log("finished", "ok");
+    if (!parado) log("finished", "ok");
     pintarCarteras();
   } catch (e) { logger("trLog")(readableError(e), "err"); }
   finally { btns.forEach((b) => (b.disabled = false)); }
@@ -4095,6 +4255,9 @@ async function leerCostesReales() {
   const b = $("#fwCost"), nota = $("#fwRefreshNote");
   const log = fwLog();
   if (!trToken) { nota.textContent = "Paste a token address above first — the cost is per coin."; return; }
+  /* Los Swap que se leen son los de UNA pool V3. Una moneda que va por V4 o por
+   * un puente no tiene esa pool: su coste es lo que esta pagina apunto al operar. */
+  if (trToken.motor) { nota.textContent = "The on-chain cost reader only knows V3 pools. " + trToken.symbol + " trades through V4 or a bridge, so its cost is what this page noted on each buy and sell."; return; }
   if (!rápida && !clúster.length) { nota.textContent = "No wallets to read."; return; }
   b.disabled = true;
   const antes = b.textContent;
