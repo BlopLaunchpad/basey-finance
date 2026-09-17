@@ -152,7 +152,7 @@ const FAB = leerCon(["function getPool(address,address,uint24) view returns (add
 const POOL = leerCon(["function slot0() view returns (uint160,int24,uint16,uint16,uint16,uint8,bool)"]);
 
 /* ── un escenario ── */
-async function escenario({ nombre, tokenDebajo, atacante, nonceCambia }) {
+async function escenario({ nombre, tokenDebajo, atacante, nonceCambia, conRápida }) {
   console.log("\n== " + nombre);
   /* Una cartera nueva cuyo token (su primer despliegue) quede del lado pedido de USDC. */
   let cuenta, tokenDir;
@@ -188,16 +188,26 @@ async function escenario({ nombre, tokenDebajo, atacante, nonceCambia }) {
     saldos.push(sAt);
   }
 
-  const fn = new Function("ethers", "PLAN", "QUOTE", "ARC", "ERC20_ABI", "account", "signer", "provider", "compileAll", "COMPRA_ATOMICA_SOURCE",
+  const fn = new Function("ethers", "PLAN", "QUOTE", "ARC", "ERC20_ABI", "account", "signer", "provider", "compileAll", "COMPRA_ATOMICA_SOURCE", "rápida",
     AYUDAS + "\nreturn { sortPair, sqrtPriceX96From, tickFromPrice, usable, apartarDelPrecio, lanzarConCompraAtomica, ARC_SWAP_ROUTER };");
 
   let nonce = 1;       // el token ya gasto el 0
   let receta = null;
+  /* Los nonces que la pagina FIJA. Con la rapida tienen que ser exactamente los
+     de la cadena; con una cartera del navegador no se fija ninguno. */
+  const noncesFijados = [];
+  const fijado = (ov) => {
+    if (ov && ov.nonce !== undefined) {
+      assert.equal(ov.nonce, nonce, "a pinned nonce must be the chain's next one");
+      noncesFijados.push(ov.nonce);
+    }
+  };
   const falsos = {
     ...ethers,
     Contract: function (addr, abi) {
       return {
-        approve: async (sp, amt) => {
+        approve: async (sp, amt, ov) => {
+          fijado(ov);
           llamadas.push({ from: cuenta, to: addr, data: ERC20.encodeFunctionData("approve", [sp, amt]) });
           nonce++;
           return { wait: async () => ({ status: 1 }) };
@@ -206,7 +216,8 @@ async function escenario({ nombre, tokenDebajo, atacante, nonceCambia }) {
     },
     ContractFactory: function (abi, bytecode) {
       return {
-        deploy: async (plan) => {
+        deploy: async (plan, ov) => {
+          fijado(ov);
           const datos = bytecode + new ethers.Interface(abi).encodeDeploy([plan]).slice(2);
           const dirEsperada = ethers.getCreateAddress({ from: cuenta, nonce });
           llamadas.push({ from: cuenta, data: datos });
@@ -234,11 +245,16 @@ async function escenario({ nombre, tokenDebajo, atacante, nonceCambia }) {
       };
     },
   };
+  /* `proveedor` es el nodo de la cartera CONECTADA. Con la rapida va UN envio
+     atrasado a proposito: es el fallo de la primera version, que le preguntaba
+     a el. La rapida trae el suyo (el rotativo de rpc.js), que va al dia. */
   const proveedor = {
-    getTransactionCount: async () => nonce + (nonceCambia && llamadas.length >= 3 ? 1 : 0),
+    getTransactionCount: async () => nonce + (nonceCambia && llamadas.length >= 3 ? 1 : 0) - (conRápida ? 1 : 0),
   };
+  const firmante = conRápida ? { provider: { getTransactionCount: async () => nonce } } : {};
   const compileAll = async () => LANZADOR.file;
-  const H = fn(falsos, PLAN, QUOTE, ARC, [], cuenta, {}, proveedor, compileAll, COMPRA_ATOMICA_SOURCE);
+  const H = fn(falsos, PLAN, QUOTE, ARC, [], cuenta, firmante, proveedor, compileAll, COMPRA_ATOMICA_SOURCE,
+    conRápida ? firmante : null);
 
   /* Las cuentas del muro, IGUAL que ejecutarPlan. */
   const s = H.sortPair(tokenDir, QUOTE.address);
@@ -272,7 +288,7 @@ async function escenario({ nombre, tokenDebajo, atacante, nonceCambia }) {
   try {
     hecha = await H.lanzarConCompraAtomica({ s, sq, q, amtCompra, compraUsd: PLAN.compra.usdc, DEC, firma, log });
   } catch (e) { error = e; }
-  return { cuenta, tokenDir, s, sq, q, amtCompra, PLAN, llamadas, saldos, receta, hecha, error, registro, firmas, H };
+  return { cuenta, tokenDir, s, sq, q, amtCompra, PLAN, llamadas, saldos, receta, hecha, error, registro, firmas, H, noncesFijados };
 }
 
 /* ── lecturas despues, en la misma simulacion ── */
@@ -302,6 +318,7 @@ for (const tokenDebajo of [true, false]) {
   if (x.error) { console.log(x.registro.join("\n")); throw x.error; }
   const lanz = x.receta.dirEsperada;
   assert.equal(x.firmas, 3, "3 signatures: approve token, approve USDC, launch");
+  assert.equal(x.noncesFijados.length, 0, "a browser wallet picks its own nonces");
   ok("3 signatures, and the launcher at the address that was approved (" + lanz + ")");
   assert.notEqual(x.hecha.id, null, "NFT id read from the receipt");
   assert(x.hecha.comprados > 0n, "tokens bought read from the Launched event");
@@ -369,6 +386,15 @@ for (const tokenDebajo of [true, false]) {
   assert.equal(x.receta, null, "never tried to deploy");
   assert.equal(x.firmas, 2, "only the two approvals were signed");
   ok("stops before deploying, with the two approvals as the only signatures");
+}
+
+{
+  const x = await escenario({ nombre: "E: the fast wallet signs, and the connected wallet's node is one send behind", tokenDebajo: true, conRápida: true });
+  if (x.error) { console.log(x.registro.join("\n")); throw x.error; }
+  assert.deepEqual(x.noncesFijados, [1, 2, 3], "approve, approve, deploy pinned to the chain's nonces");
+  ok("the fast wallet pins nonces 1, 2 and 3, read from its own provider and not the lagging one");
+  assert.notEqual(x.hecha.id, null); assert(x.hecha.comprados > 0n);
+  ok("and the launch lands: NFT #" + x.hecha.id + ", " + ethers.formatUnits(x.hecha.comprados, 18) + " ATOM bought");
 }
 
 console.log("\n" + casos + " checks, all good (" + peticiones + " requests to " + NODO + ", nothing sent to the chain)");

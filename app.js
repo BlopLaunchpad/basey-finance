@@ -2668,20 +2668,38 @@ async function lanzarConCompraAtomica({ s, sq, q, amtCompra, compraUsd, DEC, fir
   const cantMuro = q.a0 > 0n ? q.a0 : q.a1;
   if (cantMuro <= 0n) throw new Error("the wall holds no tokens — nothing was signed");
 
-  const leerNonce = () => provider.getTransactionCount(account, "pending");
+  /* EL NONCE SE PREGUNTA A QUIEN FIRMA.  (17-sep-2026, pregunta del dueño:
+   * "eso lo hace todo con la rapida main no?")
+   * Si, cuando la rapida esta derivada: usarRápida() cambia `signer` y
+   * `account` de toda la pagina. Y la rapida firma y ENVIA por el proveedor
+   * rotativo de rpc.js, que lleva un suelo de nonce para no creer a un nodo
+   * que no ha visto su ultimo envio. La primera version leia el nonce de
+   * `provider`, el nodo de la cartera CONECTADA, que no conoce ese suelo:
+   * atrasado un envio, el lanzador se preveia en otra direccion y el
+   * despliegue revertia (sin perder fondos, pero sin lanzar). Se lee del
+   * proveedor del propio firmante, y con la rapida -- que es una ethers.Wallet
+   * y respeta el nonce que se le da -- se fijan ademas los tres nonces: el
+   * lanzador cae SI O SI donde se aprobo, o la primera aprobacion falla con
+   * "nonce too low" antes de mover nada. Con una cartera del navegador no se
+   * fija: MetaMask y compania ponen el suyo. */
+  const prov = (signer && signer.provider) || provider;
+  const esRápida = typeof rápida !== "undefined" && rápida !== null && signer === rápida;
+  const conNonce = (n) => (esRápida ? { nonce: n } : {});
+  const leerNonce = () => prov.getTransactionCount(account, "pending");
   const n0 = await leerNonce();
   const APROBACIONES = 2;
   const esperado = n0 + APROBACIONES;
   const lanzador = ethers.getCreateAddress({ from: account, nonce: esperado });
-  log("the launcher will be deployed at " + lanzador + " (nonce " + esperado + ")");
+  log("the launcher will be deployed at " + lanzador + " (nonce " + esperado + ")" +
+      (esRápida ? " — signed by the fast wallet, nonces pinned" : ""));
 
   const tok = new ethers.Contract(tokenMuro, ERC20_ABI, signer);
   const usd = new ethers.Contract(QUOTE.address, ERC20_ABI, signer);
   firma("approve exactly the wall's " + PLAN.símbolo + " to the launcher");
-  await (await tok.approve(lanzador, cantMuro)).wait();
+  await (await tok.approve(lanzador, cantMuro, conNonce(n0))).wait();
   log("wall tokens approved", "ok");
   firma("approve exactly $" + compraUsd + " USDC to the launcher, for the first buy");
-  await (await usd.approve(lanzador, amtCompra)).wait();
+  await (await usd.approve(lanzador, amtCompra, conNonce(n0 + 1))).wait();
   log("USDC for the first buy approved", "ok");
 
   /* El nodo de la cartera puede tardar un momento en contar el ultimo recibo. */
@@ -2703,7 +2721,7 @@ async function lanzarConCompraAtomica({ s, sq, q, amtCompra, compraUsd, DEC, fir
     quote: QUOTE.address, buyAmount: amtCompra, minOut: 0n,
   };
   firma("create the pool, place the wall and buy $" + compraUsd + " — one transaction, nobody buys in between");
-  const contrato = await new ethers.ContractFactory(c.abi, "0x" + c.evm.bytecode.object, signer).deploy(plan);
+  const contrato = await new ethers.ContractFactory(c.abi, "0x" + c.evm.bytecode.object, signer).deploy(plan, conNonce(esperado));
   const rec = await contrato.deploymentTransaction().wait();
   const real = (await contrato.getAddress()).toLowerCase();
   if (real !== lanzador.toLowerCase()) {
