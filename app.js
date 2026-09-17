@@ -20,7 +20,8 @@ import * as PAD from "./launchpad.js?v=2";
 import { derivarMadre, derivarClúster, máximoASacar, reservaDeGas,
          repartir, DISPERSE_SOURCE } from "./wallets.js?v=2";
 import { planPorDefecto, resumen as planResumen, avisosDe, precioDe,
-         posicionesDe, sobranteDe, MCAP_POR_DEFECTO } from "./plan.js?v=7";
+         posicionesDe, compraDe, pctDelMuro, MCAP_POR_DEFECTO } from "./plan.js?v=8";
+import { COMPRA_ATOMICA_SOURCE } from "./compra-atomica.js?v=1";
 import { V4, V4_TIERS, POSM_ABI, STATEVIEW_ABI, poolKey, poolId, liquidityFor,
          encodeMint, permit2Steps, HOOK_NOTE } from "./v4.js?v=1";
 import { crearProveedorRotativo, NODOS_ARC } from "./rpc.js?v=2";
@@ -1925,12 +1926,14 @@ function leerPlan() {
   PLAN.telegram = $("#pTg").value.trim();
   PLAN.descripción = $("#pDesc").value.trim();
   PLAN.metadataEditable = $("#pEditable").checked;
-  PLAN.suelo.usdc = Number(String($("#pFloor").value).replace(/[^0-9.]/g, "")) || 0;
+  PLAN.compra.usdc = Number(String($("#pBuy").value).replace(/[^0-9.]/g, "")) || 0;
   PLAN.tesoreríaPct = Math.max(0, Math.min(100, Number($("#pTreasury").value) || 0));
   $$("#pStages .stage").forEach((el, k) => {
     const t = PLAN.tramos[k];
     if (!t) return;
-    t.pct = Math.max(0, Number(el.querySelector(".s-pct").value) || 0);
+    /* El % del muro no se teclea: es todo lo que no es tesoreria. */
+    t.pct = pctDelMuro(PLAN);
+    el.querySelector(".s-pct").value = String(t.pct);
     t.desde = Number(el.querySelector(".s-from").value) || t.desde;
     t.hasta = Number(el.querySelector(".s-to").value) || t.hasta;
     t.bloquear = el.querySelector(".s-lock").checked;
@@ -1945,23 +1948,24 @@ function pintarTramos() {
   PLAN.tramos.forEach((t, k) => {
     const el = document.createElement("div");
     el.className = "stage";
-    const campo = (cls, et, val, paso) => {
+    const campo = (cls, et, val, soloLectura) => {
       const l = document.createElement("label"); l.className = "field";
       const s = document.createElement("span"); s.textContent = et;
       const i2 = document.createElement("input");
       i2.type = "text"; i2.inputMode = "decimal"; i2.className = cls; i2.value = val;
-      i2.addEventListener("input", leerPlan);
+      if (soloLectura) { i2.readOnly = true; i2.tabIndex = -1; }
+      else i2.addEventListener("input", leerPlan);
       l.append(s, i2); return l;
     };
     const cab = document.createElement("div"); cab.className = "stage-head";
-    const b = document.createElement("b"); b.textContent = "Sell wall " + (k + 1);
+    const b = document.createElement("b"); b.textContent = "Sell wall";
     cab.append(b, qmark(
-      "Holds only your token, so it costs you no USDC. As the price rises through this band it sells for you, at prices anyone can read on chain before they buy. The average you get is the geometric mean of the two ends, not the top.",
-      "Sell wall " + (k + 1)));
+      "Holds only your token, so it costs you no USDC. As the price rises through this band it sells for you, at prices anyone can read on chain before they buy. It takes everything that is not your treasury, so nothing is left over. The average you get is the geometric mean of the two ends, not the top.",
+      "Sell wall"));
     el.append(cab);
 
     const fila = document.createElement("div"); fila.className = "stage-row";
-    fila.append(campo("s-pct", "% of supply", t.pct));
+    fila.append(campo("s-pct", "% of supply (all but the treasury)", pctDelMuro(PLAN), true));
     fila.append(campo("s-from", "from × price", t.desde));
     fila.append(campo("s-to", "to × price", t.hasta));
 
@@ -2077,36 +2081,9 @@ async function leerTokenExistente() {
   } catch (e) { info.textContent = readableError(e); }
 }
 
-const SOBRANTES = [
-  { id: "muros", name: "Into the sell walls",
-    what: "shared out across them, in proportion to what each already holds",
-    like: "Nothing is left over and nothing extra reaches you. The shape of the launch does not change — a wall with half the supply gets half the leftover." },
-  { id: "quemar", name: "Burnt",
-    what: "sent to the dead address in its own transaction",
-    like: "Gone for good, verifiable by anyone, and it costs one extra signature. Supply goes down and the market cap you opened at does not." },
-  { id: "guardar", name: "Kept by me",
-    what: "it goes to your wallet along with the treasury",
-    like: "Honest if you meant it. Say it out loud though, because how much the creator keeps is the first number a buyer checks — and if you asked for 1% and end up with 10%, that is what they will see." },
-];
-
-function pintarSobrante() {
-  const box = $("#pLeftover");
-  box.textContent = "";
-  const sobra = sobranteDe(PLAN);
-  $("#leftoverBox").hidden = sobra <= 0;
-  if (sobra <= 0) return;
-  for (const o of SOBRANTES) {
-    const lab = document.createElement("label"); lab.className = "radio";
-    const inp = document.createElement("input");
-    inp.type = "radio"; inp.name = "sobrante"; inp.value = o.id; inp.checked = PLAN.sobrante === o.id;
-    const sp = document.createElement("span");
-    const b = document.createElement("b"); b.textContent = o.name;
-    sp.append(b, document.createTextNode(" — " + o.what), qmark(o.like, o.name));
-    lab.append(inp, sp);
-    inp.addEventListener("change", () => { PLAN.sobrante = o.id; pintarPlan(); });
-    box.append(lab);
-  }
-}
+/* "QUE PASA CON LO QUE SOBRA" SE FUE CON LOS TRES MUROS (17-sep-2026). Con un
+ * solo muro que se lleva todo lo que no es tesoreria no sobra nada que decidir,
+ * y una pregunta sin respuesta posible solo confunde. */
 
 function pintarChips() {
   const box = $("#pSupplyChips");
@@ -2125,8 +2102,6 @@ function pintarPlan() {
   const P0 = precioDe(PLAN);
   $("#pPriceOut").textContent =
     "Opens at $" + P0.toExponential(4) + " per token. Computed from the two numbers above — never typed.";
-
-  pintarSobrante();
 
   const av = avisosDe(PLAN);
   const w = $("#pWarn");
@@ -2149,7 +2124,7 @@ function pintarPlan() {
       : ["Deploy " + PLAN.símbolo,
          PLAN.supply.toLocaleString("es") + " supply, " + decDelPlan() + " decimals",
          "1 tx"],
-    ["Create the pool", "against USDC, 1.00% fee, opening at $" + P0.toExponential(4) + "  (mcap $" + PLAN.mcapObjetivo.toLocaleString("es") + ")", "in the batch"],
+    ["Create the pool", "against USDC, 1.00% fee, opening at $" + P0.toExponential(4) + "  (mcap $" + PLAN.mcapObjetivo.toLocaleString("es") + ")", r.compra > 0 ? "atomic" : "in the batch"],
   ];
   // El porcentaje AL LADO del numero. "10.000.000" no se lee como "1%" de un
   // vistazo, y eso hizo dudar de un calculo que estaba bien. Un numero que
@@ -2158,7 +2133,12 @@ function pintarPlan() {
   for (const p of r.posiciones) {
     const que = p.tokens > 0 ? T(p.tokens) + " tokens" + pct(p.tokens) + ", no USDC" : "$" + p.usdc + " USDC, no tokens";
     const cierre = p.bloquear ? "  ·  locked " + p.meses + " months" : "";
-    filas.push([p.etiqueta, que + "  ·  $" + p.min.toExponential(3) + " → $" + p.max.toExponential(3) + cierre, p.bloquear ? "batch + 2 tx" : "in the batch"]);
+    const junto = r.compra > 0 ? "atomic" : "in the batch";
+    filas.push([p.etiqueta, que + "  ·  $" + p.min.toExponential(3) + " → $" + p.max.toExponential(3) + cierre, p.bloquear ? junto + " + 2 tx" : junto]);
+  }
+  /* LA COMPRA INICIAL, EN LA MISMA TRANSACCION QUE LA POOL. Ver compra-atomica.js. */
+  if (r.compra > 0) {
+    filas.push(["First buy", "$" + r.compra + " USDC  ·  in the same transaction that creates the pool and the wall — nobody can buy before you", "atomic"]);
   }
   /* LO QUE TE QUEDAS TU, EN UNA SOLA FILA.
    *
@@ -2220,9 +2200,9 @@ function pintarPlan() {
     return (v >= 10 || v === 0 ? v.toFixed(0) : v.toFixed(1)) + "%";
   };
   $("#pCost").textContent =
-    pasosReales + " transactions \u00b7 $" + r.usdc + " of USDC for the floor \u00b7 roughly $" +
+    pasosReales + " transactions \u00b7 $" + r.usdc + " of USDC for the first buy \u00b7 roughly $" +
     (0.02 + pasosReales * 0.02).toFixed(2) + " of gas \u00b7 " +
-    soloPct(enMuros) + " into the walls \u00b7 " + soloPct(tuyo) + " STAYS WITH YOU" +
+    soloPct(enMuros) + " into the wall \u00b7 " + soloPct(tuyo) + " STAYS WITH YOU" +
     (r.quema > 0 ? " \u00b7 " + soloPct(r.quema) + " burnt" : "") +
     (r.bloqueos ? "  \u00b7  " + r.bloqueos + " position(s) locked" : "");
 }
@@ -2447,6 +2427,12 @@ async function ejecutarPlan() {
       pendientes.push({ i, ...a });
     }
 
+    /* EL PRECIO DE LA POOL, EXACTO AL DEL PLAN O NO.  (17-sep-2026)
+     * Decide si la compra inicial puede ir junto a la pool: cualquier compra
+     * mueve el precio, asi que una pool que sigue EXACTAMENTE en el sqrtPriceX96
+     * del plan es una pool en la que nadie ha comprado todavia. Si no se puede
+     * leer, cuenta como movida: repetir una compra es peor que saltarsela. */
+    let precioIntacto = !hecho.pool;
     if (hecho.pool) {
       log("pool already exists \u2014 not created again", "ok");
       /* Y su precio no es el que dice el plan: la pool ya existia, quiza ya
@@ -2456,6 +2442,7 @@ async function ejecutarPlan() {
       try {
         const [dirPool] = await callRead(ARC.v3Factory, FACTORY_ABI, "getPool", [s.token0, s.token1, PLAN.fee]);
         const s0 = await callRead(dirPool, POOL_ABI, "slot0");
+        precioIntacto = BigInt(s0[0]) === sq;
         const real = priceFromTick(Number(s0[1]), DEC, QUOTE.decimals, s.aIsZero);
         const desvio = (real / precioDe(PLAN) - 1) * 100;
         log("   its real price is $" + real.toExponential(4) + " (tick " + Number(s0[1]) + "), " +
@@ -2466,6 +2453,46 @@ async function ejecutarPlan() {
               "Set the market cap to match, or check the ranges before signing.", "err");
         }
       } catch { log("   could not read its current price", "err"); }
+    }
+
+    /* LA COMPRA INICIAL: ATOMICA, O LA MAS RAPIDA POSIBLE.  (17-sep-2026)
+     * El dueño: "en vez de suelo pon compra atomica y si no puede ser atomica,
+     * lo mas rapido".
+     *   atomica       el muro aun no esta y la pool no existe (o sigue intacta):
+     *                 un contrato de un solo uso crea la pool, pone el muro y
+     *                 compra en UNA transaccion. Ver compra-atomica.js.
+     *   compraSuelta  el muro ya esta puesto y la pool sigue intacta, o sea que
+     *                 nadie ha comprado: ya no puede ir junto, se compra YA, en
+     *                 su propia transaccion, contra el router.
+     *   ninguna       la pool ya ha operado: una "primera" compra no seria la
+     *                 primera. Se dice y no se hace. */
+    const compraUsd = compraDe(PLAN);
+    const amtCompra = compraUsd > 0 ? ethers.parseUnits(String(compraUsd), QUOTE.decimals) : 0n;
+    const muroYaPuesto = acciones.some((a, i) => hecho.pos[i] && hecho.pos[i].minted);
+    const atomica = amtCompra > 0n && pendientes.length === 1 && precioIntacto;
+    const compraSuelta = amtCompra > 0n && pendientes.length === 0 && muroYaPuesto && hecho.pool && precioIntacto;
+    if (amtCompra > 0n && !atomica && !compraSuelta) {
+      log(hecho.pool && !precioIntacto
+        ? "first buy skipped: the pool is not at the plan price any more, so somebody has already traded or created it — buy from Trade if you still want to"
+        : "first buy skipped: the wall is not going to be placed on this run, so there is nothing to buy from", "err");
+    }
+    if (atomica || compraSuelta) {
+      /* El saldo ANTES de la primera firma. El USDC de Arc es tambien el gas,
+       * asi que la cartera tiene que tener la compra y algo mas. */
+      try {
+        const [bal] = await callRead(QUOTE.address, ERC20_ABI, "balanceOf", [account]);
+        if (BigInt(bal) < amtCompra) {
+          throw new Error("the first buy needs $" + compraUsd + " USDC and the wallet holds $" +
+                          ethers.formatUnits(bal, QUOTE.decimals) + " — nothing was signed");
+        }
+      } catch (e) { if (!e.empty && /first buy needs/.test(e.message)) throw e; }
+    }
+    let routerAprobado = false;
+    if (compraSuelta) {
+      try {
+        const [cur] = await callRead(QUOTE.address, ERC20_ABI, "allowance", [account, ARC_SWAP_ROUTER]);
+        routerAprobado = BigInt(cur) >= amtCompra;
+      } catch { /* sin leer, se pide la aprobacion: firmar una de mas no pierde nada */ }
     }
 
     /* EL CONTADOR, CON LO QUE DE VERDAD SE VA A FIRMAR. */
@@ -2480,6 +2507,7 @@ async function ejecutarPlan() {
       return (y && y.minted) || seVaAMintear ? n + 2 : n;
     }, 0);
     r.pasos = (necesita0 ? 1 : 0) + (necesita1 ? 1 : 0) + (hayLote ? 1 : 0) +
+              (atomica ? 1 : 0) + (compraSuelta ? (routerAprobado ? 1 : 2) : 0) +
               bloqueosPendientes + (r.quema > 0 && !hecho.quema ? 1 : 0);
     const hechas = acciones.length - pendientes.length;
     if (hechas || hecho.pool) {
@@ -2494,6 +2522,16 @@ async function ejecutarPlan() {
      * lo que necesitan todas las posiciones que faltan y se pide una vez. */
     const total0 = pendientes.reduce((a, q) => a + q.a0, 0n);
     const total1 = pendientes.reduce((a, q) => a + q.a1, 0n);
+
+    if (atomica) {
+      const q = pendientes[0];
+      const hecha = await lanzarConCompraAtomica({ s, sq, q, amtCompra, compraUsd, DEC, firma, log });
+      apuntar(dir, q.i, { minted: true, id: hecha.id === null ? null : String(hecha.id), lower: q.lower, upper: q.upper });
+      hecho.pos[q.i] = { minted: true, locked: false, id: hecha.id === null ? null : String(hecha.id) };
+      hecho.pool = true;
+    }
+
+    if (!atomica) {
     if (total0 > 0n) { firma("approve token0 once, for every position"); await approveIfNeeded(s.token0, total0, log, "token0"); }
     if (total1 > 0n) { firma("approve token1 once, for every position"); await approveIfNeeded(s.token1, total1, log, "token1"); }
 
@@ -2537,6 +2575,13 @@ async function ejecutarPlan() {
         hecho.pos[q.i] = { minted: true, locked: false, id: id === null ? null : String(id) };
         log("   " + q.p.etiqueta + " done" + (id === null ? "" : ", #" + id), "ok");
       });
+    }
+    }
+
+    /* Si ya no podia ir junto, la compra va AHORA, antes que los bloqueos: cada
+     * segundo que la pool pasa sin ella es un segundo para que compre otro. */
+    if (compraSuelta) {
+      await compraInicialSuelta({ dir, amtCompra, compraUsd, routerAprobado, firma, log });
     }
 
     /* Y los bloqueos, uno a uno, porque cada uno despliega su propio locker. */
@@ -2599,6 +2644,118 @@ function idsDelRecibo(rec) {
 function idDelRecibo(rec) {
   const t = idsDelRecibo(rec);
   return t.length ? t[0] : null;
+}
+
+/* ── LA POOL, EL MURO Y LA COMPRA EN UNA TRANSACCION ─────────────────────
+ * Todo lo que importa del contrato esta en compra-atomica.js. Aqui:
+ *
+ * 1. LA DIRECCION DEL LANZADOR SE CONOCE ANTES DE QUE EXISTA: la da la cartera y
+ *    el nonce con el que se va a desplegar. Las dos aprobaciones gastan dos
+ *    nonces, asi que se despliega con el tercero, y a esa direccion se aprueba.
+ * 2. ANTES DE DESPLEGAR SE COMPRUEBA QUE EL NONCE ES EL PREVISTO. Si la cartera
+ *    mando otra cosa entre medias, el lanzador caeria en otra direccion sin
+ *    permisos y revertiria: se para antes, sin gastar mas que las aprobaciones,
+ *    que apuntan a una direccion que ya nunca puede tener codigo.
+ * 3. Aprobaciones EXACTAS, no ilimitadas, como el resto de la pagina. */
+async function lanzarConCompraAtomica({ s, sq, q, amtCompra, compraUsd, DEC, firma, log }) {
+  log("compiling the one-shot launcher: pool, wall and first buy in one transaction…");
+  const file = await compileAll(COMPRA_ATOMICA_SOURCE, log);
+  const c = file.AtomicLaunch;
+  if (!c) throw new Error("the one-shot launcher did not compile — nothing was signed");
+  log("launcher compiled: " + (c.evm.bytecode.object.length / 2) + " bytes", "ok");
+
+  const tokenMuro = q.a0 > 0n ? s.token0 : s.token1;
+  const cantMuro = q.a0 > 0n ? q.a0 : q.a1;
+  if (cantMuro <= 0n) throw new Error("the wall holds no tokens — nothing was signed");
+
+  const leerNonce = () => provider.getTransactionCount(account, "pending");
+  const n0 = await leerNonce();
+  const APROBACIONES = 2;
+  const esperado = n0 + APROBACIONES;
+  const lanzador = ethers.getCreateAddress({ from: account, nonce: esperado });
+  log("the launcher will be deployed at " + lanzador + " (nonce " + esperado + ")");
+
+  const tok = new ethers.Contract(tokenMuro, ERC20_ABI, signer);
+  const usd = new ethers.Contract(QUOTE.address, ERC20_ABI, signer);
+  firma("approve exactly the wall's " + PLAN.símbolo + " to the launcher");
+  await (await tok.approve(lanzador, cantMuro)).wait();
+  log("wall tokens approved", "ok");
+  firma("approve exactly $" + compraUsd + " USDC to the launcher, for the first buy");
+  await (await usd.approve(lanzador, amtCompra)).wait();
+  log("USDC for the first buy approved", "ok");
+
+  /* El nodo de la cartera puede tardar un momento en contar el ultimo recibo. */
+  let n1 = await leerNonce();
+  for (let k = 0; k < 10 && n1 < esperado; k++) {
+    await new Promise((ok) => setTimeout(ok, 1000));
+    n1 = await leerNonce();
+  }
+  if (n1 !== esperado) {
+    throw new Error("the wallet's next nonce is " + n1 + ", not " + esperado + ": another transaction " +
+                    "went out in between, so the launcher would land at an address with no approvals. " +
+                    "Nothing was bought and no pool was created — press Run again.");
+  }
+
+  const plan = {
+    manager: ARC.positionManager, router: ARC_SWAP_ROUTER,
+    token0: s.token0, token1: s.token1, fee: PLAN.fee, sqrtPriceX96: sq,
+    tickLower: q.lower, tickUpper: q.upper, amount0: q.a0, amount1: q.a1,
+    quote: QUOTE.address, buyAmount: amtCompra, minOut: 0n,
+  };
+  firma("create the pool, place the wall and buy $" + compraUsd + " — one transaction, nobody buys in between");
+  const contrato = await new ethers.ContractFactory(c.abi, "0x" + c.evm.bytecode.object, signer).deploy(plan);
+  const rec = await contrato.deploymentTransaction().wait();
+  const real = (await contrato.getAddress()).toLowerCase();
+  if (real !== lanzador.toLowerCase()) {
+    log("the launcher landed at " + real + ", not at " + lanzador + " — it could only have worked if " +
+        "the approvals matched, so check the transaction", "err");
+  }
+
+  const id = idDelRecibo(rec);
+  let comprados = null;
+  const iface = new ethers.Interface(c.abi);
+  for (const l of rec.logs || []) {
+    if (String(l.address).toLowerCase() !== real) continue;
+    try {
+      const ev = iface.parseLog(l);
+      if (ev && ev.name === "Launched") comprados = ev.args.tokensBought;
+    } catch { /* otro evento */ }
+  }
+  log("pool created and wall placed" + (id === null ? "" : ", #" + id) + " — tx " + rec.hash, "ok");
+  log(comprados === null
+    ? "first buy of $" + compraUsd + " done in the same transaction"
+    : "first buy: $" + compraUsd + " → " + Number(ethers.formatUnits(comprados, DEC)).toLocaleString("es") +
+      " " + PLAN.símbolo + ", in the same transaction — nobody bought before you", "ok");
+  return { id, comprados, rec };
+}
+
+/* LA COMPRA INICIAL CUANDO YA NO PUEDE SER ATOMICA: la mas rapida posible.
+ * Solo se llega aqui con el muro ya puesto y la pool en el precio exacto del
+ * plan, o sea sin ninguna compra todavia. El minimo sale del Quoter con un 15 %
+ * de margen: protege de que alguien se cuele con una compra grande, y no hace
+ * revertir por el movimiento normal de unos segundos. */
+async function compraInicialSuelta({ dir, amtCompra, compraUsd, routerAprobado, firma, log }) {
+  log("the wall is already in place without a first buy, so it can no longer be atomic — buying right now instead", "err");
+  const DEC = decDelPlan();
+  if (!routerAprobado) {
+    firma("approve exactly $" + compraUsd + " USDC to the swap router");
+    const usd = new ethers.Contract(QUOTE.address, ERC20_ABI, signer);
+    await (await usd.approve(ARC_SWAP_ROUTER, amtCompra)).wait();
+  }
+  let minOut = 0n;
+  try {
+    const cot = await callRead(ARC_QUOTER, QUOTER_ABI, "quoteExactInputSingle",
+      [{ tokenIn: QUOTE.address, tokenOut: dir, amountIn: amtCompra, fee: PLAN.fee, sqrtPriceLimitX96: 0 }]);
+    minOut = (BigInt(cot[0]) * 85n) / 100n;
+  } catch { log("could not quote the buy first — buying without a minimum", "err"); }
+  firma("buy $" + compraUsd + " of " + PLAN.símbolo);
+  const router = new ethers.Contract(ARC_SWAP_ROUTER, ROUTER_ABI, signer);
+  const rec = await (await router.exactInputSingle({
+    tokenIn: QUOTE.address, tokenOut: dir, fee: PLAN.fee, recipient: account,
+    amountIn: amtCompra, amountOutMinimum: minOut, sqrtPriceLimitX96: 0,
+  })).wait();
+  log("first buy of $" + compraUsd + " done — tx " + rec.hash + (minOut > 0n
+    ? " (at least " + Number(ethers.formatUnits(minOut, DEC)).toLocaleString("es") + " " + PLAN.símbolo + ")" : ""), "ok");
 }
 
 /* ── 6b · lo que lanzaste ──────────────────────────────────────────────── */
@@ -4522,7 +4679,7 @@ $$(".subtab").forEach((s) => s.addEventListener("click", () => {
 }));
 $("#pRun").addEventListener("click", ejecutarPlan);
 $("#mineRefresh").addEventListener("click", pintarMios);
-for (const id of ["pName","pSym","pSupply","pMcap","pImage","pWeb","pTw","pTg","pDesc","pFloor","pTreasury"]) {
+for (const id of ["pName","pSym","pSupply","pMcap","pImage","pWeb","pTw","pTg","pDesc","pBuy","pTreasury"]) {
   $("#" + id).addEventListener("input", leerPlan);
 }
 $("#pEditable").addEventListener("change", leerPlan);

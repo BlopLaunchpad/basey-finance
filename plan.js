@@ -13,14 +13,22 @@
 
 export const MCAP_POR_DEFECTO = 5000;
 
-/* Un tramo: que parte del supply lleva, entre que multiplos del precio de
- * salida vive, y si se bloquea y cuanto. */
-export function tramoPorDefecto(i) {
-  return [
-    { pct: 30, desde: 1.02, hasta: 4,   bloquear: false, meses: 6 },
-    { pct: 30, desde: 4,    hasta: 20,  bloquear: true,  meses: 6 },
-    { pct: 20, desde: 20,   hasta: 100, bloquear: true,  meses: 12 },
-  ][i];
+/* UN SOLO TRAMO.  (17-sep-2026)
+ * El dueño: "ponmelo con un tramo solo, en teoria ya no quedaria". Eran tres
+ * muros (30 % de 1,02x a 4x, 30 % de 4x a 20x, 20 % de 20x a 100x) y lo que no
+ * cabia en ellos ni en la tesoreria obligaba a preguntar que hacer con el
+ * sobrante. Con un muro no sobra nada: lleva TODO lo que no es tesoreria, asi
+ * que su porcentaje no se teclea, se deduce (ver pctDelMuro). Va de 1,02x a
+ * 100x, el mismo recorrido que cubrian los tres juntos.
+ *
+ * El `pct` que queda aqui es solo el valor inicial; manda pctDelMuro(). */
+export function tramoPorDefecto() {
+  return { pct: 85, desde: 1.02, hasta: 100, bloquear: false, meses: 6 };
+}
+
+/* Lo que lleva el muro: todo menos la tesoreria. */
+export function pctDelMuro(plan) {
+  return Math.max(0, 100 - (Number(plan.tesoreríaPct) || 0));
 }
 
 export function planPorDefecto() {
@@ -44,35 +52,25 @@ export function planPorDefecto() {
     // haras. Se renuncia despues y se acaba la duda.
     metadataEditable: true,
 
-    tramos: [tramoPorDefecto(0), tramoPorDefecto(1), tramoPorDefecto(2)],
+    tramos: [tramoPorDefecto()],
 
-    suelo: {
+    /* LA COMPRA INICIAL, EN LUGAR DEL SUELO.  (17-sep-2026)
+     * El dueño: "en vez de suelo pon compra atomica". Se hace en LA MISMA
+     * transaccion que crea la pool (compra-atomica.js), asi que nadie compra
+     * antes. Y cumple lo que hacia el suelo: los USDC de esa compra quedan
+     * dentro de la pool, y el siguiente que compre ya puede vender. */
+    compra: {
       usdc: 2,
-      // El suelo va DEBAJO del precio, asi que lleva solo USDC. Es lo que
-      // permite que quien compre pueda salir: sin el, la pool nace sin un
-      // dolar dentro y una venta no tiene contra que ejecutarse.
-      desde: 0.5,
-      hasta: 0.98,
     },
 
     tesoreríaPct: 15,
-
-    /* QUE PASA CON LO QUE SOBRA.
-     *
-     * Antes no se preguntaba: lo que no cabia en muros ni tesoreria caia en
-     * "Unallocated" y acababa en la cartera del que lanza. Pedir quedarte el 1%
-     * y quedarte el 10% sin haberlo elegido es un reparto silencioso, y encima
-     * de la cifra que mas mira quien compra. Ahora es una decision con tres
-     * respuestas y ninguna por omision. */
-    sobrante: "muros",   // "muros" | "quemar" | "guardar"
   };
 }
 
 /* Un escalon de tick con fee 10000 son 200 ticks = +2,02% de precio. Un rango
  * que arranca EXACTAMENTE en el precio de salida redondea al mismo tick o por
  * debajo, queda a caballo del precio, y entonces pide USDC -- justo lo que un
- * muro de venta existe para no hacer. Por eso el primero empieza en 1.02 y no
- * en 1, y por eso el suelo acaba en 0.98 y no en 1. */
+ * muro de venta existe para no hacer. Por eso el muro empieza en 1.02 y no en 1. */
 export const SEPARACIÓN_MÍNIMA = 1.02;
 
 export function precioDe(plan) {
@@ -80,92 +78,74 @@ export function precioDe(plan) {
 }
 
 export function repartido(plan) {
-  return plan.tramos.reduce((a, t) => a + t.pct, 0);
+  return pctDelMuro(plan);
 }
 
 /* Las posiciones que se van a crear, ya con sus cantidades y precios. Esto es
  * lo que ejecuta el runner, y lo que se pinta en la tabla: la misma fuente,
  * para que lo que ves y lo que se firma no puedan separarse. */
+/* Con un solo muro que se lleva todo lo que no es tesoreria, no sobra nada.
+ * Se conserva la funcion porque app.js la importa. */
 export function sobranteDe(plan) {
-  return Math.max(0, 100 - repartido(plan) - plan.tesoreríaPct);
+  return 0;
 }
 
 export function posicionesDe(plan) {
   const P0 = precioDe(plan);
-  const vivos = plan.tramos.filter((t) => t.pct > 0);
-  const sobra = sobranteDe(plan);
-  // Repartido a PRORRATA, no a partes iguales: un muro que lleva el 50% recibe
-  // el doble que uno del 25%, y la forma del lanzamiento no cambia por rellenar.
-  const total = vivos.reduce((a, t) => a + t.pct, 0) || 1;
-  const extra = (t) => (plan.sobrante === "muros" ? (sobra * t.pct) / total : 0);
-  const out = vivos
-    .map((t, i) => ({
-      id: "muro" + (i + 1),
-      etiqueta: "Sell wall " + (i + 1),
-      tokens: Math.floor((plan.supply * (t.pct + extra(t))) / 100),
-      usdc: 0,
-      min: P0 * Math.max(t.desde, i === 0 ? SEPARACIÓN_MÍNIMA : t.desde),
-      max: P0 * t.hasta,
-      bloquear: !!t.bloquear,
-      meses: t.meses,
-    }));
-  if (plan.suelo.usdc > 0) {
-    out.push({
-      id: "suelo",
-      etiqueta: "Floor (buy wall)",
-      tokens: 0,
-      usdc: plan.suelo.usdc,
-      min: P0 * plan.suelo.desde,
-      max: P0 * Math.min(plan.suelo.hasta, 0.98),
-      bloquear: false,
-      meses: 0,
-    });
-  }
-  return out;
+  const t = plan.tramos[0];
+  const pct = pctDelMuro(plan);
+  if (!t || pct <= 0) return [];
+  return [{
+    id: "muro1",
+    etiqueta: "Sell wall",
+    tokens: Math.floor((plan.supply * pct) / 100),
+    usdc: 0,
+    min: P0 * Math.max(t.desde, SEPARACIÓN_MÍNIMA),
+    max: P0 * t.hasta,
+    bloquear: !!t.bloquear,
+    meses: t.meses,
+  }];
+}
+
+/* Los USDC de la compra inicial, o 0 si no se pide. */
+export function compraDe(plan) {
+  const v = Number(plan.compra && plan.compra.usdc);
+  return isFinite(v) && v > 0 ? v : 0;
 }
 
 export function reservasDe(plan) {
   const tes = (plan.supply * plan.tesoreríaPct) / 100;
-  const sobra = (plan.supply * sobranteDe(plan)) / 100;
   const out = [];
   if (tes > 0) out.push({
     etiqueta: "Treasury",
     tokens: tes,
     nota: "for expenses — sold into the pool, never withdrawn as liquidity",
   });
-  // Solo llega aqui si lo has pedido. Ni repartido ni quemado se queda contigo.
-  if (sobra > 0 && plan.sobrante === "guardar") {
-    out.push({ etiqueta: "Also kept", tokens: sobra, nota: "the leftover, kept on purpose" });
-  }
   return out;
 }
 
-/* Lo que se quema, si esa es la respuesta. Va a la direccion muerta en su
- * propia transaccion, visible en la cadena para cualquiera. */
+/* Sin sobrante no hay quema. Se conserva porque resumen() la devuelve. */
 export function quemaDe(plan) {
-  const sobra = sobranteDe(plan);
-  return plan.sobrante === "quemar" && sobra > 0 ? (plan.supply * sobra) / 100 : 0;
+  return 0;
 }
 
 export function resumen(plan) {
   const pos = posicionesDe(plan);
   const bloqueos = pos.filter((p) => p.bloquear).length;
+  const compra = compraDe(plan);
   return {
     precio: precioDe(plan),
-    /* deploy (solo si el plan escribe el token) + UNA aprobacion por moneda +
-     * UN lote que lleva dentro la pool y todos los mints + (locker + enviar el
-     * NFT) por bloqueo + la quema.
-     *
-     * La pool ya no cuenta aparte y los mints tampoco: el position manager de
-     * Arc tiene multicall(), comprobado en su bytecode, asi que todo eso es una
-     * transaccion. Los bloqueos siguen sueltos porque cada uno despliega su
-     * propio locker, y meterlos en el lote exigiria adivinar los ids de unos
-     * NFT que aun no existen. */
+    /* deploy (solo si el plan escribe el token) + aprobar el token + aprobar el
+     * USDC de la compra + UNA transaccion que crea la pool, pone el muro y
+     * compra (o el lote de siempre si no hay compra) + (locker + enviar el NFT)
+     * si se bloquea. Los bloqueos siguen sueltos porque el locker necesita el
+     * id del NFT, que no existe hasta que el muro se crea. */
     pasos: (plan.modo === "existente" ? 0 : 1) +
            (pos.some((x) => x.tokens > 0) ? 1 : 0) +
-           (pos.some((x) => x.usdc > 0) ? 1 : 0) +
-           1 + bloqueos * 2 + (quemaDe(plan) > 0 ? 1 : 0),
-    usdc: pos.reduce((a, p) => a + p.usdc, 0),
+           (compra > 0 ? 1 : 0) +
+           1 + bloqueos * 2,
+    usdc: compra,
+    compra,
     repartido: repartido(plan),
     tesorería: plan.tesoreríaPct,
     libre: Math.max(0, 100 - repartido(plan) - plan.tesoreríaPct),
@@ -182,26 +162,13 @@ export function resumen(plan) {
 export function avisosDe(plan) {
   const out = [];
   const r = repartido(plan);
-  if (r + plan.tesoreríaPct > 100) {
-    out.push("The walls and the treasury add up to " + (r + plan.tesoreríaPct) + "% — more supply than exists. Adjust before launching.");
+  if (r === 0) out.push("The treasury takes the whole supply, so the wall holds nothing and the pool opens with nothing to sell.");
+  const t = plan.tramos[0];
+  if (t && !(t.hasta > Math.max(t.desde, SEPARACIÓN_MÍNIMA))) {
+    out.push("The wall ends at or below where it starts. Raise \"to × price\" above \"from × price\".");
   }
-  if (r === 0) out.push("No wall holds any tokens, so the pool will open with nothing to sell.");
-  const sobra = sobranteDe(plan);
-  if (sobra > 0 && plan.sobrante === "guardar") {
-    out.push("The walls take " + r + "% and the treasury " + plan.tesoreríaPct + "%, so " + sobra +
-      "% is left over and you have chosen to keep it — that is " + (sobra + plan.tesoreríaPct) +
-      "% in your wallet, not " + plan.tesoreríaPct + "%. It is the first number a buyer looks at.");
-  }
-  if (sobra > 0 && plan.sobrante === "quemar") {
-    out.push(sobra + "% of the supply will be burnt in its own transaction, to the dead address. It cannot be undone and anyone can verify it.");
-  }
-  if (plan.suelo.usdc <= 0) {
-    out.push("With no floor the pool opens without a dollar inside. People can buy, but the first buyer cannot sell until somebody else does.");
-  }
-  for (let i = 1; i < plan.tramos.length; i++) {
-    if (plan.tramos[i].desde < plan.tramos[i - 1].hasta) {
-      out.push("Wall " + (i + 1) + " starts below where wall " + i + " ends: they overlap and compete with each other.");
-    }
+  if (compraDe(plan) <= 0) {
+    out.push("With no first buy the pool opens without a dollar inside. People can buy, but the first buyer cannot sell until somebody else does.");
   }
   /* Solo si el plan escribe el contrato. Con un token que ya existe, este aviso
    * hablaba de una funcion que el plan no ha puesto y que puede no estar. */

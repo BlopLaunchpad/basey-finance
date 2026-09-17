@@ -485,31 +485,27 @@
           </label>
         </div>
 
-        <h2>Sell walls</h2>
+        <h2>Sell wall</h2>
         <p class="lede">
-          Each one holds only your token and needs no USDC. The price rises
-          through them and they sell for you, at prices published on chain
+          One wall holds everything that is not your treasury, so nothing is
+          left over. It holds only your token and needs no USDC: the price
+          rises through it and it sells for you, at prices published on chain
           before anyone buys.
         </p>
         <div id="pStages"></div>
 
-        <h2>Floor</h2>
+        <h2>First buy</h2>
         <div class="grid2">
           <label class="field">
-            <span>USDC in the floor</span>
-            <div class="priceRow"><span class="unit">$</span><input id="pFloor" type="text" inputmode="decimal" value="2"></div>
-            <small>The only money you put in. It is what lets a buyer sell back.</small>
+            <span>USDC you buy with</span>
+            <div class="priceRow"><span class="unit">$</span><input id="pBuy" type="text" inputmode="decimal" value="2"></div>
+            <small>Bought in the same transaction that creates the pool and the wall, so nobody can buy before you. Those dollars stay in the pool, which is what lets the next buyer sell back. 0 to skip.</small>
           </label>
           <label class="field">
             <span>Treasury kept in your wallet</span>
             <div class="priceRow"><input id="pTreasury" type="text" inputmode="numeric" value="15"><span class="unit">%</span></div>
             <small>Sold into the pool for expenses — never withdrawn as liquidity.</small>
           </label>
-        </div>
-
-        <div class="field" id="leftoverBox">
-          <span>What happens to whatever is left over</span>
-          <div class="rangeList" id="pLeftover"></div>
         </div>
 
         <div class="conflicts" id="pWarn" hidden></div>
@@ -527,7 +523,9 @@
           <h3>What you will sign</h3>
           <p id="pSteps">One transaction per row, in order. It stops at the first failure rather than carrying on.</p>
           <h3>The one thing to watch</h3>
-          <p>Every sell wall should ask for tokens and no USDC. If one asks for USDC its range landed on the wrong side of the price — stop instead of signing.</p>
+          <p>The wall should ask for tokens and no USDC. If it asks for USDC its range landed on the wrong side of the price — stop instead of signing.</p>
+          <h3>Why the first buy cannot be sniped</h3>
+          <p>A one-shot contract, compiled here like the locker, creates the pool, places the wall and buys in its constructor. It is one transaction: there is no moment in which the pool exists without your buy. It checks the pool opens exactly at the plan price, keeps nothing and has no owner. You approve the exact amounts to the address it will have before it exists.</p>
         </div>
       </div>
     </div>
@@ -753,7 +751,7 @@
   <h2>Our launchpad</h2>
   <p class="lede">
     One transaction creates the coin, opens its Uniswap pool and puts the
-    liquidity in. You do not pick the ranges, the walls or the floor: the
+    liquidity in. You do not pick the range, the wall or the first buy: the
     contract does. It opens at $5,000, graduates at $50,000, charges 1% and
     splits the fees 80% to you and 20% to the platform.
   </p>
@@ -841,6 +839,6 @@
 
 
 
-<script type="module" src="app.js?v=49"></script>
+<script type="module" src="app.js?v=50"></script>
 </body>
 </html>
