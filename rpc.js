@@ -78,8 +78,37 @@
  * listaban hoy un RPC público de mainnet (5042) aparte de arc-scan.
  */
 
-/* EL ORDEN ES LA PRIORIDAD: se lee del primero sano, y niorfun el último. */
+/* EL ORDEN ES LA PRIORIDAD: se lee del primero sano, y niorfun el último.
+ *
+ * 16-sep-2026: ENTRA arc.drpc.org DE PRIMERO. El dueño, intentando comprar:
+ * "me pasa igual muchos fallos, me saltan errores al telegram todo el rato".
+ * Sus logs de esa noche, con los TRES nodos cayendo a la vez y cada uno a su
+ * manera:
+ *
+ *   #4: No Arc node answered eth_getTransactionReceipt just now
+ *       (rpc.arc-scan.org HTTP 503 ... thecusp.io HTTP 200 "Every Arc mainnet
+ *        RPC backend failed." . niorfun.com timed out)
+ *
+ * Medido ese dia desde España con Origin https://basey.finance:
+ *
+ *   arc.drpc.org        eth_call ok, estimateGas 0x5208, nonce ok, 10 de 10,
+ *                       0,11 s, preflight CORS 204 con max-age 600
+ *   rpc.arc-scan.org    503 a ratos: limita POR IP, y desde una casa toca mucho
+ *   thecusp.io          nuestro proxy; llevaba dentro el RPC oficial, al que el
+ *                       indexer le gasta la cuota desde la misma IP del droplet
+ *   niorfun.com         SE CUELGA: 12 s sin responder, medido desde el droplet.
+ *                       Es el 'niorfun.com timed out' de todos esos errores, y
+ *                       12 s es MAS que el presupuesto entero de una peticion.
+ *
+ * arc.drpc.org es el nodo que usa RadarDex -- salio leyendo sus peticiones de
+ * red mientras se buscaba su icono de Blockscout. La prueba de que aguanta un
+ * dex entero en produccion ya la habian hecho ellos.
+ *
+ * Se conservan los cuatro y NO se echa a nadie: el que falla se castiga 15 s y
+ * pasa al fondo solo. Sacar un nodo de la lista por un mal rato ya salio mal
+ * dos veces en este proyecto. */
 export const NODOS_ARC = [
+  "https://arc.drpc.org",
   "https://rpc.arc-scan.org",
   "https://thecusp.io/api/arc-rpc",
   "https://niorfun.com/api/rpc",
