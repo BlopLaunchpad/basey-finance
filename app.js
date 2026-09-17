@@ -15,7 +15,7 @@
  */
 
 import { FEATURES, OWNERSHIP, FEE_TIERS, RANGE_PRESETS, ARC, QUOTE, conflictsFor, verdict } from "./token-features.js?v=4";
-import { generateSource, powerList, metadataPreview } from "./solidity.js?v=5";
+import { generateSource, powerList, metadataPreview } from "./solidity.js?v=6";
 import * as PAD from "./launchpad.js?v=2";
 import { derivarMadre, derivarClúster, máximoASacar, reservaDeGas,
          repartir, DISPERSE_SOURCE } from "./wallets.js?v=2";
