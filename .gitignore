@@ -3,3 +3,5 @@ node_modules/
 .vercel/
 .env*
 venues.js
+# notas internas: este repo se SIRVE en basey.finance, un .md aqui seria publico
+BASEY.md

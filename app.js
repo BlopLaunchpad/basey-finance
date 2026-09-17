@@ -15,7 +15,7 @@
  */
 
 import { FEATURES, OWNERSHIP, FEE_TIERS, RANGE_PRESETS, ARC, QUOTE, conflictsFor, verdict } from "./token-features.js?v=4";
-import { generateSource, powerList, metadataPreview } from "./solidity.js?v=4";
+import { generateSource, powerList, metadataPreview } from "./solidity.js?v=5";
 import * as PAD from "./launchpad.js?v=2";
 import { derivarMadre, derivarClúster, máximoASacar, reservaDeGas,
          repartir, DISPERSE_SOURCE } from "./wallets.js?v=2";
@@ -929,7 +929,10 @@ function renderMetaPreview() {
 
   const code = document.createElement("code");
   code.className = "metaJson";
-  code.textContent = "metadataURI() \u2192 " + (val.length > 220 ? val.slice(0, 220) + "\u2026" : val || "(empty)");
+  /* se enseña el getter que leen FUERA, que es el que importa para que salga la
+     imagen; el JSON crudo de metadataURI() es el mismo contenido. */
+  code.textContent = (state.metaMode === "inline" ? "tokenURI() \u2192 data:application/json;base64,… \u2014 metadataURI() \u2192 " : "tokenURI() = metadataURI() \u2192 ") +
+    (val.length > 200 ? val.slice(0, 200) + "\u2026" : val || "(empty)");
 
   const note = document.createElement("div");
   note.className = "metaNote";
@@ -1146,6 +1149,11 @@ const STATE_READS = [
   { sig: "taxBps()", type: "uint256", label: "Transfer fee (bps)" },
   { sig: "maxSupply()", type: "uint256", label: "Hard cap (raw)" },
   { sig: "metadataURI()", type: "string", label: "Metadata" },
+  /* los tres que leen los rastreadores de esta cadena, y que un token de antes
+     del 17-sep NO tiene: si salen vacios, es de los viejos. */
+  { sig: "tokenURI()", type: "string", label: "Token URI" },
+  { sig: "logo()", type: "string", label: "Logo" },
+  { sig: "description()", type: "string", label: "Description" },
 ];
 
 async function inspect(addr) {
@@ -1270,10 +1278,32 @@ const CONTROLES = [
     abi: "function setTax(uint16,address)",
     aviso: "Above zero, swaps through a V3 or V4 pool revert. Buying and selling stop working." },
 
-  { sig: "setMetadataURI(string)", nombre: "Picture and links", boton: "Update",
+  { sig: "setMetadataURI(string)", nombre: "Picture and links (our indexer)", boton: "Update",
     campos: [{ k: "uri", et: "New metadataURI", ph: '{"image":"https://..."}' }],
     arma: (v) => ["setMetadataURI", [v.uri]],
     abi: "function setMetadataURI(string)" },
+
+  /* EL QUE DE VERDAD CAMBIA LO QUE SE VE FUERA (17-sep): los rastreadores leen
+     tokenURI(), no metadataURI(). Se admite el JSON tal cual y se manda como data
+     URI, que es la forma con la que sale la imagen. */
+  { sig: "setTokenURI(string)", nombre: "Picture and links (trackers)", boton: "Update",
+    campos: [{ k: "uri", et: "New tokenURI (JSON or link)", ph: '{"image":"https://..."}' }],
+    arma: (v) => {
+      const t = String(v.uri || "").trim();
+      const val = t.startsWith("{") ? "data:application/json;base64," + btoa(unescape(encodeURIComponent(t))) : t;
+      return ["setTokenURI", [val]];
+    },
+    abi: "function setTokenURI(string)" },
+
+  { sig: "setLogo(string)", nombre: "Logo image", boton: "Update",
+    campos: [{ k: "url", et: "Image URL", ph: "https://… or ipfs://…" }],
+    arma: (v) => ["setLogo", [v.url]],
+    abi: "function setLogo(string)" },
+
+  { sig: "setDescription(string)", nombre: "Description", boton: "Update",
+    campos: [{ k: "text", et: "New description", ph: "one line about the token" }],
+    arma: (v) => ["setDescription", [v.text]],
+    abi: "function setDescription(string)" },
 
   { sig: "upgradeTo(address)", nombre: "Replace the contract", boton: "Upgrade",
     campos: [{ k: "impl", et: "New implementation", ph: "0x..." }],

@@ -26,7 +26,32 @@ function esc(s) {
 /* The schema is not invented here. It is the one this chain's indexers already
  * parse: image, website, twitter, telegram, description. Our own indexer reads
  * exactly those five keys (blop-indexer/src/discovery.js), which is why a token
- * launched with them shows its picture without anyone being asked to add it. */
+ * launched with them shows its picture without anyone being asked to add it.
+ *
+ * AND THE GETTER NAME MATTERS MORE THAN THE SCHEMA.  (17-sep-2026, measured)
+ * `metadataURI()` is what OUR indexer reads, and it was the only getter here.
+ * The trackers everyone else uses do not read it. Checked on chain, on tokens
+ * that DO show their picture minutes after launch:
+ *   0x8bad245f…b01f (PAWSINU, plain Uniswap V4 pool, no launchpad)
+ *       tokenURI() -> data:application/json;base64,{"image":"https://ipfs.io/…"}
+ *   0x394d38f8…fa2e (FAZE, faze.fun)      tokenURI(), logo(), description()
+ *   0x997caf12…866d (barc, Arguspad)      logo()
+ * So every token from here now exposes tokenURI() as well — and logo() and
+ * description() when they are filled in — with metadataURI() kept for ours.
+ * One JSON, four getters, and nobody has to submit anything by hand. */
+
+/* El data URI que usan los que si se ven: base64 del JSON. Vale en el navegador
+   y en node (btoa y TextEncoder son globales en los dos), y se trocea porque
+   String.fromCharCode con un array enorme revienta la pila. */
+function base64(txt) {
+  const bytes = new TextEncoder().encode(txt);
+  let crudo = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) crudo += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(crudo);
+}
+function dataUriJSON(json) {
+  return "data:application/json;base64," + base64(json);
+}
 function metadataJSON(state) {
   const pairs = [];
   const put = (k, v) => { if (v && String(v).trim()) pairs.push('"' + k + '":"' + esc(String(v).trim()) + '"'); };
@@ -93,7 +118,8 @@ export function generateSource(state) {
     if (S.maxTx) p(" *   - setLimits(): change the per-transfer and per-wallet caps");
     if (S.transferTax) p(" *   - setTax(): change the transfer fee, up to the hard ceiling below");
     if (S.metaMutable && S.metaMode && S.metaMode !== "none") {
-      p(" *   - setMetadataURI(): change the picture, the description and the links");
+      p(" *   - setMetadataURI() / setTokenURI() / setLogo() / setDescription():");
+      p(" *     change the picture, the description and the links (whichever exist)");
     }
     p(" *");
     p(
@@ -123,10 +149,18 @@ export function generateSource(state) {
   if (S.metaMode && S.metaMode !== "none") {
     const inline = S.metaMode === "inline";
     const valor = inline ? metadataJSON(S) : String(S.metaUri || "").trim();
+    /* tokenURI() es el getter que leen los rastreadores de esta cadena (ver la nota
+       del esquema, arriba). Con el JSON dentro va como data URI en base64, que es
+       exactamente la forma del token que el dueño vio salir con su imagen; con un
+       enlace, es el enlace tal cual. */
+    const uriParaRastreadores = inline ? dataUriJSON(valor) : valor;
+    const img = inline ? String(S.metaImage || "").trim() : "";
+    const desc = inline ? String(S.metaDescription || "").trim() : "";
     p();
-    p("    /// Picture, description and links. metadataURI() is what indexers on");
-    p("    /// this chain already read \u2014 both this launcher's own platform token");
-    p("    /// and other launchpads here expose exactly this getter.");
+    p("    /// Picture, description and links, in the four getters the trackers on");
+    p("    /// this chain actually read: tokenURI() is the one they all look at,");
+    p("    /// logo() and description() are what some of them prefer, and");
+    p("    /// metadataURI() is the raw JSON this launcher's own indexer reads.");
     if (inline) {
       p("    /// The JSON lives IN the contract: no gateway, no host, nothing to keep");
       p("    /// alive. It costs more gas once and then cannot rot.");
@@ -137,10 +171,16 @@ export function generateSource(state) {
     }
     if (S.metaMutable) {
       p("    string public metadataURI;");
+      p("    string public tokenURI;");
+      if (img) p("    string public logo;");
+      if (desc) p("    string public description;");
     } else {
       p("    /// Fixed at deploy. Nobody can change it later, including you \u2014 which");
       p("    /// also means a wrong link is wrong forever.");
       p("    string public constant metadataURI = \"" + esc(valor) + "\";");
+      p("    string public constant tokenURI = \"" + esc(uriParaRastreadores) + "\";");
+      if (img) p("    string public constant logo = \"" + esc(img) + "\";");
+      if (desc) p("    string public constant description = \"" + esc(desc) + "\";");
     }
   }
 
@@ -230,8 +270,14 @@ export function generateSource(state) {
   }
   if (S.capped && S.mintable) p("        maxSupply = " + String(S.maxSupply) + " * 10 ** " + S.decimals + ";");
   if (S.metaMode && S.metaMode !== "none" && S.metaMutable) {
-    const valor = S.metaMode === "inline" ? metadataJSON(S) : String(S.metaUri || "").trim();
+    const inline = S.metaMode === "inline";
+    const valor = inline ? metadataJSON(S) : String(S.metaUri || "").trim();
+    const img = inline ? String(S.metaImage || "").trim() : "";
+    const desc = inline ? String(S.metaDescription || "").trim() : "";
     p("        metadataURI = \"" + esc(valor) + "\";");
+    p("        tokenURI = \"" + esc(inline ? dataUriJSON(valor) : valor) + "\";");
+    if (img) p("        logo = \"" + esc(img) + "\";");
+    if (desc) p("        description = \"" + esc(desc) + "\";");
   }
   p("        totalSupply = " + String(S.supply) + " * 10 ** " + S.decimals + ";");
   p("        balanceOf[msg.sender] = totalSupply;");
@@ -405,12 +451,34 @@ export function generateSource(state) {
   }
 
   if (S.metaMode && S.metaMode !== "none" && S.metaMutable) {
+    const inline = S.metaMode === "inline";
+    const img = inline ? String(S.metaImage || "").trim() : "";
+    const desc = inline ? String(S.metaDescription || "").trim() : "";
     p();
     p("    /// Lets you fix a broken link later. It also lets you swap the picture");
     p("    /// and the description for something else entirely, at any time.");
+    p("    /// One setter per getter on purpose: the trackers read different ones,");
+    p("    /// and a single setter that changed only metadataURI would leave the");
+    p("    /// picture they DO read pointing at the old file.");
     p("    function setMetadataURI(string calldata uri) external onlyOwner {");
     p("        metadataURI = uri;");
     p("    }");
+    p();
+    p("    function setTokenURI(string calldata uri) external onlyOwner {");
+    p("        tokenURI = uri;");
+    p("    }");
+    if (img) {
+      p();
+      p("    function setLogo(string calldata url) external onlyOwner {");
+      p("        logo = url;");
+      p("    }");
+    }
+    if (desc) {
+      p();
+      p("    function setDescription(string calldata text) external onlyOwner {");
+      p("        description = text;");
+      p("    }");
+    }
   }
 
   if (S.permit) {
