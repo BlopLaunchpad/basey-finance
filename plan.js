@@ -46,11 +46,19 @@ export function planPorDefecto() {
     web: "",
     twitter: "",
     telegram: "",
-    // Con esto puesto queda setMetadataURI(), que es el unico poder de dueno
-    // del contrato. Permite arreglar un enlace roto -- y tambien cambiar la
-    // identidad entera, que es lo que un comprador tiene que confiar que no
-    // haras. Se renuncia despues y se acaba la duda.
-    metadataEditable: true,
+    /* IDENTIDAD EDITABLE O RENUNCIA, PERO NO LAS DOS  (18-sep-2026)
+     * Con `metadataEditable` queda setMetadataURI() (y setTokenURI(), setLogo() y
+     * setDescription()), que son los unicos poderes de dueño del contrato: sirven
+     * para arreglar un enlace roto, y tambien para cambiar la identidad entera,
+     * que es lo que un comprador tiene que confiar que no haras.
+     * Con `renunciar` el dueño se suelta DENTRO del despliegue y `owner()`
+     * contesta la direccion cero: es lo que hace que "Renunciado" salga en verde
+     * en los rastreadores, y lo que pidio el dueño el 18-sep. Los setters no
+     * pueden existir a la vez, asi que por defecto va la renuncia: la identidad ya
+     * viaja DENTRO del contrato y no depende de nadie. Si se marca editable, se
+     * puede renunciar despues desde "Your tokens" (Drop ownership). */
+    metadataEditable: false,
+    renunciar: true,
 
     tramos: [tramoPorDefecto()],
 
@@ -173,7 +181,10 @@ export function avisosDe(plan) {
   /* Solo si el plan escribe el contrato. Con un token que ya existe, este aviso
    * hablaba de una funcion que el plan no ha puesto y que puede no estar. */
   if (plan.metadataEditable && plan.modo !== "existente") {
-    out.push("setMetadataURI() stays in the contract, so you can fix the image and links later and renounce once you no longer need to. It is the only owner power this token will have.");
+    out.push("The identity setters stay in the contract, so you can fix the image and links later. They are the only owner powers this token will have, and until you renounce, a tracker shows this token as NOT renounced. \"Drop ownership\" in Your tokens ends that.");
+  }
+  if (plan.renunciar && plan.modo !== "existente") {
+    out.push("Ownership is dropped inside the deploy transaction, so owner() answers the zero address from the first block and nothing about this token can be changed by anyone, you included. The picture and links are already inside the contract.");
   }
   return out;
 }

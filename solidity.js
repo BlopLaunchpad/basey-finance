@@ -202,6 +202,18 @@ export function generateSource(state) {
     p("    bool private _initialized;");
   }
 
+  /* SIN NINGUN PODER DE DUEÑO PERO CON RENUNCIA (18-sep-2026): los rastreadores
+     (GMGN y los escaneres que usa) miran `owner()`. Un contrato que NI SIQUIERA
+     tiene ese getter no les sale "renunciado": les sale interrogacion, que es lo
+     que vio el dueño. Asi que se declara la constante y contesta la direccion
+     cero, que es la verdad y no cuesta gas. */
+  if (!owned && S.ownership === "renounce") {
+    p();
+    p("    /// There is no owner and there never was: this token has no owner-only");
+    p("    /// function at all. The getter exists so anyone (and any tracker) can");
+    p("    /// check it on chain instead of taking it on trust.");
+    p("    address public constant owner = address(0);");
+  }
   if (owned) {
     p();
     p("    address public owner;");

@@ -219,4 +219,39 @@ await caso("actualizable: la metadata se escribe en initialize()", async () => {
   assert.equal(salida["logo()"], base.metaImage);
 });
 
+/* 7. LA RENUNCIA DEL PASO 6 (18-sep): sin ningun poder de dueño, `owner()` tiene que
+      contestar la direccion cero. Un token que ni tiene el getter le sale al
+      rastreador como interrogacion, no como renunciado, y eso es lo que vio el dueño. */
+await caso("renuncia: owner() contesta la direccion cero y no hay ningun setter", async () => {
+  const cfg = { ...base, ownership: "renounce", metaMutable: false };
+  const { abi, bytecode } = compilar(generateSource(cfg), "renuncia");
+  assert.ok(abi.some((x) => x.name === "owner" && x.stateMutability === "view"), "falta owner()");
+  for (const f of ["setMetadataURI", "setTokenURI", "setLogo", "setDescription", "transferOwnership", "renounceOwnership"]) {
+    assert.ok(!abi.some((x) => x.name === f), f + "() no puede existir si no hay dueño");
+  }
+  const cuenta = "0x00000000000000000000000000000000000ba5e1";
+  const nonce = Number(await rpc("eth_getTransactionCount", [cuenta, "latest"]));
+  const direccion = ethers.getCreateAddress({ from: cuenta, nonce });
+  const llamadas = [
+    { from: cuenta, data: bytecode, gas: hex(8_000_000) },
+    { from: cuenta, to: direccion, data: ethers.id("owner()").slice(0, 10), gas: hex(400_000) },
+    { from: cuenta, to: direccion, data: ethers.id("tokenURI()").slice(0, 10), gas: hex(400_000) },
+  ];
+  const params = [{ blockStateCalls: [{ stateOverrides: { [cuenta]: { balance: MIL_USDC_NATIVO } }, calls: llamadas }], validation: false }, "latest"];
+  const res = (await rpc("eth_simulateV1", params))[0].calls;
+  assert.equal(res[0].status, "0x1", "el despliegue revierte");
+  const [dueño] = ethers.AbiCoder.defaultAbiCoder().decode(["address"], res[1].returnData);
+  assert.equal(dueño, ethers.ZeroAddress, "owner() tiene que ser la direccion cero");
+  assert.equal(deJSON(ethers.AbiCoder.defaultAbiCoder().decode(["string"], res[2].returnData)[0]).image, base.metaImage,
+    "y la imagen sigue dentro del contrato");
+});
+
+/* 8. Y con identidad editable NO se renuncia: el setter necesita dueño. */
+await caso("editable: owner() es quien despliega, no la direccion cero", async () => {
+  const cfg = { ...base, ownership: "keep", metaMutable: true };
+  const { abi } = compilar(generateSource(cfg), "editable con dueño");
+  assert.ok(abi.some((x) => x.name === "setTokenURI"), "tiene setTokenURI");
+  assert.ok(abi.some((x) => x.name === "renounceOwnership"), "y se puede renunciar despues desde Your tokens");
+});
+
 console.log("\n" + bien + " casos, todos bien | peticiones al nodo: " + peticiones);

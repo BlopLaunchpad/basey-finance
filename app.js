@@ -15,7 +15,7 @@
  */
 
 import { FEATURES, OWNERSHIP, FEE_TIERS, RANGE_PRESETS, ARC, QUOTE, conflictsFor, verdict } from "./token-features.js?v=4";
-import { generateSource, powerList, metadataPreview } from "./solidity.js?v=6";
+import { generateSource, powerList, metadataPreview } from "./solidity.js?v=7";
 import * as PAD from "./launchpad.js?v=2";
 import { derivarMadre, derivarClúster, máximoASacar, reservaDeGas,
          repartir, DISPERSE_SOURCE } from "./wallets.js?v=2";
@@ -1955,7 +1955,10 @@ function leerPlan() {
   PLAN.twitter = $("#pTw").value.trim();
   PLAN.telegram = $("#pTg").value.trim();
   PLAN.descripción = $("#pDesc").value.trim();
+  /* UNA U OTRA: los setters son poderes de dueño, asi que no caben con la renuncia.
+     Manda la casilla que se acaba de tocar; eso lo hacen los dos oyentes del final. */
   PLAN.metadataEditable = $("#pEditable").checked;
+  PLAN.renunciar = $("#pRenounce").checked && !PLAN.metadataEditable;
   PLAN.compra.usdc = Number(String($("#pBuy").value).replace(/[^0-9.]/g, "")) || 0;
   PLAN.tesoreríaPct = Math.max(0, Math.min(100, Number($("#pTreasury").value) || 0));
   $$("#pStages .stage").forEach((el, k) => {
@@ -2366,7 +2369,7 @@ async function ejecutarPlan() {
 
     const cfg = {
       name: PLAN.nombre, symbol: PLAN.símbolo, supply: String(PLAN.supply), decimals: DEC,
-      ownership: "keep", metaMode: "inline", metaMutable: PLAN.metadataEditable,
+      ownership: PLAN.renunciar ? "renounce" : "keep", metaMode: "inline", metaMutable: PLAN.metadataEditable,
       metaImage: PLAN.imagen, metaDescription: PLAN.descripción,
       metaWebsite: PLAN.web, metaTwitter: PLAN.twitter, metaTelegram: PLAN.telegram,
       taxBps: 0, taxCeilingBps: 1000, maxSupply: "0", maxTxAmount: "0", maxWalletAmount: "0",
@@ -4730,7 +4733,16 @@ $("#mineRefresh").addEventListener("click", pintarMios);
 for (const id of ["pName","pSym","pSupply","pMcap","pImage","pWeb","pTw","pTg","pDesc","pBuy","pTreasury"]) {
   $("#" + id).addEventListener("input", leerPlan);
 }
-$("#pEditable").addEventListener("change", leerPlan);
+/* Las dos casillas se excluyen, y se apaga la OTRA, no la que se acaba de tocar:
+   apagar la tocada seria discutirle al dueño lo que acaba de pulsar. */
+$("#pEditable").addEventListener("change", () => {
+  if ($("#pEditable").checked) $("#pRenounce").checked = false;
+  leerPlan();
+});
+$("#pRenounce").addEventListener("change", () => {
+  if ($("#pRenounce").checked) $("#pEditable").checked = false;
+  leerPlan();
+});
 $("#pExisting").addEventListener("input", () => {
   clearTimeout(window._tkTimer);
   window._tkTimer = setTimeout(leerTokenExistente, 500);
