@@ -467,12 +467,12 @@
         </div>
         <label class="field"><span>Description</span><input id="pDesc" type="text" maxlength="300" placeholder="One sentence."></label>
         <label class="radio">
-          <input type="checkbox" id="pRenounce" checked>
+          <input type="radio" name="pPropiedad" id="pRenounce" checked>
           <span><b>Renounce ownership in the deploy</b> — <code>owner()</code> answers the zero address from the first block, so trackers show it renounced and nobody can change anything, you included. The picture and the links already live inside the contract.</span>
         </label>
         <label class="radio">
-          <input type="checkbox" id="pEditable">
-          <span><b>Or let me change the identity later</b> — keeps <code>setTokenURI()</code>, <code>setLogo()</code>, <code>setDescription()</code> and <code>setMetadataURI()</code>. Those are owner powers, so this turns the renounce off and the token reads as NOT renounced until you use Drop ownership in Your tokens.</span>
+          <input type="radio" name="pPropiedad" id="pEditable">
+          <span><b>Or let me change the identity later</b> — keeps one owner power, <code>setMetadata()</code>: the picture, the description and the links, nothing else. It turns the renounce off, and the token reads as NOT renounced until you use Drop ownership in Your tokens.</span>
         </label>
 
         <h2 id="sizeH">Size</h2>
@@ -843,6 +843,6 @@
 
 
 
-<script type="module" src="app.js?v=54"></script>
+<script type="module" src="app.js?v=56"></script>
 </body>
 </html>

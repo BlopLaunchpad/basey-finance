@@ -181,7 +181,7 @@ export function avisosDe(plan) {
   /* Solo si el plan escribe el contrato. Con un token que ya existe, este aviso
    * hablaba de una funcion que el plan no ha puesto y que puede no estar. */
   if (plan.metadataEditable && plan.modo !== "existente") {
-    out.push("The identity setters stay in the contract, so you can fix the image and links later. They are the only owner powers this token will have, and until you renounce, a tracker shows this token as NOT renounced. \"Drop ownership\" in Your tokens ends that.");
+    out.push("setMetadata() stays in the contract, so you can fix the picture and the links later. It is the only owner power this token will have, and until you renounce, a tracker shows this token as NOT renounced. \"Drop ownership\" in Your tokens ends that.");
   }
   if (plan.renunciar && plan.modo !== "existente") {
     out.push("Ownership is dropped inside the deploy transaction, so owner() answers the zero address from the first block and nothing about this token can be changed by anyone, you included. The picture and links are already inside the contract.");

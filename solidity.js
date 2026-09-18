@@ -52,9 +52,16 @@ function base64(txt) {
 function dataUriJSON(json) {
   return "data:application/json;base64," + base64(json);
 }
-function metadataJSON(state) {
+/* exportada (18-sep): basey-token.js arma con ella los argumentos del contrato fijo,
+   asi el esquema del JSON tiene UNA sola definicion para las dos rutas. */
+export function metadataJSON(state) {
   const pairs = [];
-  const put = (k, v) => { if (v && String(v).trim()) pairs.push('"' + k + '":"' + esc(String(v).trim()) + '"'); };
+  /* JSON.stringify y no esc() (18-sep, hallazgo de la revision): esc() solo escapa
+     la barra y las comillas, y un TABULADOR pegado en la descripcion dejaba un JSON
+     que JSON.parse rechaza. Con el contrato fijo eso ya no lo para el compilador:
+     se desplegaba y quedaba roto para siempre en un token sin dueño. Para texto
+     normal la salida es la MISMA que antes (acentos y emojis no se escapan). */
+  const put = (k, v) => { if (v && String(v).trim()) pairs.push(JSON.stringify(k) + ":" + JSON.stringify(String(v).trim())); };
   put("name", state.name);
   put("symbol", state.symbol);
   put("description", state.metaDescription);

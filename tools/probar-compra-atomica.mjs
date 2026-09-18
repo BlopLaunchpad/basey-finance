@@ -46,7 +46,9 @@ const { ethers } = cargarEthers();
 const importar = (f) => import(pathToFileURL(path.join(raiz, f)).href);
 const PLANJS = await importar("plan.js");
 const { COMPRA_ATOMICA_SOURCE } = await importar("compra-atomica.js");
-const { generateSource } = await importar("solidity.js");
+/* El token es el CONTRATO FIJO del paso 6 (basey-token.js, 18-sep), con la identidad por
+   constructor: lo mismo que despliega la pagina, no una fuente generada aparte. */
+const { BASEY_TOKEN_SOURCE, argsDelToken, contratoDelToken } = await importar("basey-token.js");
 const { ARC, QUOTE, FEATURES } = await importar("token-features.js");
 
 const NODO = process.env.NODO || "https://arc.drpc.org";
@@ -168,20 +170,17 @@ async function escenario({ nombre, tokenDebajo, atacante, nonceCambia, conRápid
   const PLAN = PLANJS.planPorDefecto();
   PLAN.símbolo = "ATOM";
   PLAN.compra.usdc = 25;
-  const cfg = {
-    name: "Atomic Test", symbol: PLAN.símbolo, supply: String(PLAN.supply), decimals: 18,
-    ownership: "keep", metaMode: "inline", metaMutable: true, metaImage: "", metaDescription: "",
-    metaWebsite: "", metaTwitter: "", metaTelegram: "",
-    taxBps: 0, taxCeilingBps: 1000, maxSupply: "0", maxTxAmount: "0", maxWalletAmount: "0",
-  };
-  for (const f of FEATURES) cfg[f.id] = false;
-  const tokenC = compilar(generateSource(cfg)).file[PLAN.símbolo];
+  PLAN.nombre = "Atomic Test";
+  PLAN.imagen = "https://ipfs.io/ipfs/QmSWKk2f5tdpN5rZyRHYosW8XSMVx2cZybnB1W3no1wv2J";
+  const tokenC = compilar(BASEY_TOKEN_SOURCE).file[contratoDelToken(PLAN.metadataEditable)];
+  assert.ok(tokenC, "the fixed token contract compiled");
   const DEC = 18;
   const r = PLANJS.resumen(PLAN);
   assert.equal(r.posiciones.length, 1, "one wall");
 
   /* La cadena simulada: cada firma es una llamada. */
-  const llamadas = [{ from: cuenta, data: "0x" + tokenC.evm.bytecode.object }];
+  const llamadas = [{ from: cuenta, data: "0x" + tokenC.evm.bytecode.object +
+    new ethers.Interface(tokenC.abi).encodeDeploy(argsDelToken(PLAN)).slice(2) }];
   const saldos = [cuenta];
   if (atacante) {
     const sAt = ethers.getAddress("0x00000000000000000000000000000000bad0c0de");

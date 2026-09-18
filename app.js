@@ -15,12 +15,15 @@
  */
 
 import { FEATURES, OWNERSHIP, FEE_TIERS, RANGE_PRESETS, ARC, QUOTE, conflictsFor, verdict } from "./token-features.js?v=4";
-import { generateSource, powerList, metadataPreview } from "./solidity.js?v=7";
+import { generateSource, powerList, metadataPreview, metadataJSON } from "./solidity.js?v=9";
+/* El contrato FIJO del paso 6 (18-sep): el mismo bytecode para todos los tokens,
+   la identidad por constructor. Ver basey-token.js. */
+import { BASEY_TOKEN_SOURCE, argsDelToken, contratoDelToken } from "./basey-token.js?v=2";
 import * as PAD from "./launchpad.js?v=2";
 import { derivarMadre, derivarClúster, máximoASacar, reservaDeGas,
          repartir, DISPERSE_SOURCE } from "./wallets.js?v=2";
 import { planPorDefecto, resumen as planResumen, avisosDe, precioDe,
-         posicionesDe, compraDe, pctDelMuro, MCAP_POR_DEFECTO } from "./plan.js?v=8";
+         posicionesDe, compraDe, pctDelMuro, MCAP_POR_DEFECTO } from "./plan.js?v=9";
 import { COMPRA_ATOMICA_SOURCE } from "./compra-atomica.js?v=1";
 import { V4, V4_TIERS, POSM_ABI, STATEVIEW_ABI, poolKey, poolId, liquidityFor,
          encodeMint, permit2Steps, HOOK_NOTE } from "./v4.js?v=1";
@@ -1295,6 +1298,32 @@ const CONTROLES = [
     },
     abi: "function setTokenURI(string)" },
 
+  /* EL DEL CONTRATO FIJO (18-sep): una sola llamada para el JSON, la imagen y la
+     descripcion, asi nunca apuntan a cosas distintas. tokenURI() sigue al JSON solo. */
+  /* Sin JSON a mano (18-sep, hallazgo de la revision): con tres campos libres se
+     podia dejar la imagen del JSON distinta de logo(). Ahora el JSON se arma aqui con
+     metadataJSON, el mismo esquema que el despliegue, con el nombre y el simbolo
+     leidos del propio token, y logo() y description() reciben los MISMOS valores.
+     Sustituye todo: lo que se deje vacio se borra. */
+  { sig: "setMetadata(string,string,string)", nombre: "Picture, description and links (replaces all)", boton: "Update",
+    campos: [
+      { k: "img", et: "Image URL", ph: "https://… or ipfs://…" },
+      { k: "desc", et: "Description", ph: "one line about the token" },
+      { k: "web", et: "Website", ph: "https://…" },
+      { k: "tw", et: "X / Twitter", ph: "https://x.com/…" },
+      { k: "tg", et: "Telegram", ph: "https://t.me/…" },
+    ],
+    arma: async (v, dec, addr) => {
+      const [nombre] = await callRead(addr, ["function name() view returns (string)"], "name");
+      const [simbolo] = await callRead(addr, ["function symbol() view returns (string)"], "symbol");
+      const img = String(v.img || "").trim(), desc = String(v.desc || "").trim();
+      const json = metadataJSON({ name: nombre, symbol: simbolo, metaDescription: desc, metaImage: img,
+        metaWebsite: v.web, metaTwitter: v.tw, metaTelegram: v.tg });
+      JSON.parse(json);   // si no es JSON valido, no se firma nada
+      return ["setMetadata", [json, img, desc]];
+    },
+    abi: "function setMetadata(string,string,string)" },
+
   { sig: "setLogo(string)", nombre: "Logo image", boton: "Update",
     campos: [{ k: "url", et: "Image URL", ph: "https://… or ipfs://…" }],
     arma: (v) => ["setLogo", [v.url]],
@@ -1381,7 +1410,9 @@ async function ejecutar(addr, c, vals, dec, box, btn) {
     if (!signer) { await connect(); if (!signer) return; }
     if (c.confirmar && !confirm(c.nombre + "\n\n" + (c.aviso || "") + "\n\nGo ahead?")) return;
     let fn, args;
-    try { [fn, args] = c.arma(vals, dec); }
+    /* arma puede ser asincrona y recibe la direccion: setMetadata lee nombre y
+       simbolo del propio token para armar el JSON (18-sep). */
+    try { [fn, args] = await c.arma(vals, dec, addr); }
     catch (e) { throw new Error("check the values: " + (e.shortMessage || e.message)); }
     btn.disabled = true;
     const con = new ethers.Contract(addr, [c.abi], signer);
@@ -1957,8 +1988,11 @@ function leerPlan() {
   PLAN.descripción = $("#pDesc").value.trim();
   /* UNA U OTRA: los setters son poderes de dueño, asi que no caben con la renuncia.
      Manda la casilla que se acaba de tocar; eso lo hacen los dos oyentes del final. */
+  /* Son dos RADIOS (18-sep, hallazgo de la revision): con casillas se podian dejar
+     las dos desmarcadas, y el contrato fijo desplegaba BaseyToken, renunciado, justo
+     al reves de lo que decia la casilla. Ahora siempre hay una, y solo una. */
   PLAN.metadataEditable = $("#pEditable").checked;
-  PLAN.renunciar = $("#pRenounce").checked && !PLAN.metadataEditable;
+  PLAN.renunciar = !PLAN.metadataEditable;
   PLAN.compra.usdc = Number(String($("#pBuy").value).replace(/[^0-9.]/g, "")) || 0;
   PLAN.tesoreríaPct = Math.max(0, Math.min(100, Number($("#pTreasury").value) || 0));
   $$("#pStages .stage").forEach((el, k) => {
@@ -2060,7 +2094,8 @@ function pintarModo() {
         const g = $("#" + id).closest(".grid2"); if (g) g.hidden = ex;
       }
       const d = $("#pDesc").closest(".field"); if (d) d.hidden = ex;
-      const ed = $("#pEditable").closest(".radio"); if (ed) ed.hidden = ex;
+      /* con un token que ya existe no se despliega nada: ni renuncia ni editable */
+      for (const id of ["#pEditable", "#pRenounce"]) { const ed = $(id).closest(".radio"); if (ed) ed.hidden = ex; }
       // El supply viene de la cadena; su recuadro comparte rejilla con el market
       // cap, que SI se elige, asi que se oculta solo el campo.
       const su = $("#pSupply").closest(".field"); if (su) su.hidden = ex;
@@ -2367,14 +2402,9 @@ async function ejecutarPlan() {
     if (!signer) { log("connect a wallet first"); await connect(); }
     if (!signer) { log("no wallet — nothing was done", "err"); return; }
 
-    const cfg = {
-      name: PLAN.nombre, symbol: PLAN.símbolo, supply: String(PLAN.supply), decimals: DEC,
-      ownership: PLAN.renunciar ? "renounce" : "keep", metaMode: "inline", metaMutable: PLAN.metadataEditable,
-      metaImage: PLAN.imagen, metaDescription: PLAN.descripción,
-      metaWebsite: PLAN.web, metaTwitter: PLAN.twitter, metaTelegram: PLAN.telegram,
-      taxBps: 0, taxCeilingBps: 1000, maxSupply: "0", maxTxAmount: "0", maxWalletAmount: "0",
-    };
-    for (const f of FEATURES) cfg[f.id] = false;
+    /* El paso 6 ya no genera una fuente por token: despliega BaseyToken (sin dueño)
+       o BaseyTokenEditable, con la identidad como argumentos. Ver basey-token.js. */
+    const contratoToken = contratoDelToken(PLAN.metadataEditable);
 
     /* El contador de firmas es de todo el plan, no del despliegue. Vivio un rato
      * dentro del else y con un token que ya existe no llegaba a declararse:
@@ -2394,14 +2424,17 @@ async function ejecutarPlan() {
                  decimals: decDelPlan(), image: PLAN.imagen,
                  at: new Date().toISOString() });
     } else {
-    log("compiling " + PLAN.símbolo + "…");
-    const file = await compileAll(generateSource(cfg), log);
-    const nombre = Object.keys(file)[0];
-    const c = file[nombre];
+    /* SIEMPRE EL MISMO BYTECODE (18-sep): verificado una vez, los exploradores
+       emparejan solos cada token que salga de aqui. Lo que cambia entre un token y
+       otro va en los argumentos del constructor, no en el codigo. */
+    log("compiling the " + contratoToken + " contract for " + PLAN.símbolo + "\u2026");
+    const file = await compileAll(BASEY_TOKEN_SOURCE, log);
+    const c = file[contratoToken];
+    if (!c || !c.evm || !c.evm.bytecode || !c.evm.bytecode.object) throw new Error("the compiler did not return " + contratoToken);
     log("compiled: " + (c.evm.bytecode.object.length / 2) + " bytes", "ok");
 
     firma("deploy the token");
-    const tk = await new ethers.ContractFactory(c.abi, "0x" + c.evm.bytecode.object, signer).deploy();
+    const tk = await new ethers.ContractFactory(c.abi, "0x" + c.evm.bytecode.object, signer).deploy(...argsDelToken(PLAN));
     await tk.waitForDeployment();
     dir = await tk.getAddress();
     log("token at " + dir, "ok");
@@ -4735,14 +4768,9 @@ for (const id of ["pName","pSym","pSupply","pMcap","pImage","pWeb","pTw","pTg","
 }
 /* Las dos casillas se excluyen, y se apaga la OTRA, no la que se acaba de tocar:
    apagar la tocada seria discutirle al dueño lo que acaba de pulsar. */
-$("#pEditable").addEventListener("change", () => {
-  if ($("#pEditable").checked) $("#pRenounce").checked = false;
-  leerPlan();
-});
-$("#pRenounce").addEventListener("change", () => {
-  if ($("#pRenounce").checked) $("#pEditable").checked = false;
-  leerPlan();
-});
+/* radios: el navegador ya garantiza que haya una y solo una */
+$("#pEditable").addEventListener("change", leerPlan);
+$("#pRenounce").addEventListener("change", leerPlan);
 $("#pExisting").addEventListener("input", () => {
   clearTimeout(window._tkTimer);
   window._tkTimer = setTimeout(leerTokenExistente, 500);
