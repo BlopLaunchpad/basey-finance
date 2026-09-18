@@ -2434,9 +2434,19 @@ async function ejecutarPlan() {
     log("compiled: " + (c.evm.bytecode.object.length / 2) + " bytes", "ok");
 
     firma("deploy the token");
-    const tk = await new ethers.ContractFactory(c.abi, "0x" + c.evm.bytecode.object, signer).deploy(...argsDelToken(PLAN));
-    await tk.waitForDeployment();
-    dir = await tk.getAddress();
+    /* EN DOS PASOS Y A LA VISTA (18-sep-2026). Con ContractFactory.deploy() +
+       waitForDeployment() el dueño se quedo mirando "sign 1 of 4" sin nada mas:
+       un nodo acepto la transaccion (la rapida la firma sola), no llego a ningun
+       otro y no se mino, y waitForDeployment no tiene plazo. Medido despues: nonce
+       194 minado y 194 pendiente en los cinco nodos, o sea, sin nada en cola.
+       Ahora el hash sale en pantalla en cuanto un nodo lo acepta, y la espera
+       tiene plazo y dice que paso (ver esperarMinada). */
+    const txToken = await new ethers.ContractFactory(c.abi, "0x" + c.evm.bytecode.object, signer)
+      .getDeployTransaction(...argsDelToken(PLAN));
+    const enviada = await signer.sendTransaction(txToken);
+    log("sent: " + enviada.hash + " \u00b7 nonce " + enviada.nonce + " \u2014 waiting for it to be mined\u2026", "ok");
+    const recToken = await esperarMinada(enviada, log);
+    dir = ethers.getAddress(recToken.contractAddress || ethers.getCreateAddress({ from: enviada.from, nonce: enviada.nonce }));
     log("token at " + dir, "ok");
     remember({ address: dir, name: PLAN.nombre, symbol: PLAN.símbolo, decimals: DEC,
                abi: c.abi, image: PLAN.imagen, at: new Date().toISOString() });
@@ -2723,6 +2733,32 @@ function idDelRecibo(rec) {
  *    permisos y revertiria: se para antes, sin gastar mas que las aprobaciones,
  *    que apuntan a una direccion que ya nunca puede tener codigo.
  * 3. Aprobaciones EXACTAS, no ilimitadas, como el resto de la pagina. */
+/* ESPERAR A QUE SE MINE, CON PLAZO.  (18-sep-2026)
+ * Un nodo puede aceptar una transaccion y no pasarla a nadie: devuelve el hash y
+ * ya. Esperar el recibo sin plazo deja la pagina clavada para siempre, que es lo
+ * que le paso al dueño en el primer lanzamiento con el contrato fijo. Arc hace un
+ * bloque cada 0,5 s: 90 s son 180 bloques, de sobra para algo que va a minar.
+ * Al vencer no se adivina: se mira si algun nodo aun la tiene y cual es el nonce
+ * de la cartera en la cadena, y se dice si es seguro volver a lanzar el plan. */
+async function esperarMinada(tx, log, ms = 90000) {
+  let rec;
+  try {
+    rec = await tx.wait(1, ms);
+  } catch (e) {
+    if (!e || e.code !== "TIMEOUT") throw e;
+    let laTiene = null, nonceCadena = null;
+    try { laTiene = await tx.provider.getTransaction(tx.hash); } catch { /* no se sabe */ }
+    try { nonceCadena = await tx.provider.getTransactionCount(tx.from, "latest"); } catch { /* no se sabe */ }
+    const perdida = !laTiene && nonceCadena != null && nonceCadena <= tx.nonce;
+    throw new Error("not mined after " + Math.round(ms / 1000) + " s \u2014 hash " + tx.hash + ", nonce " + tx.nonce +
+      (nonceCadena != null ? ", wallet nonce on chain " + nonceCadena : "") + ". " +
+      (perdida ? "No Arc node has it: it was dropped, nothing was spent, and it is safe to run the plan again."
+               : "A node may still have it pending: wait a minute and check the token list before running the plan again."));
+  }
+  if (!rec || rec.status !== 1) throw new Error("the transaction reverted on chain: " + tx.hash);
+  return rec;
+}
+
 async function lanzarConCompraAtomica({ s, sq, q, amtCompra, compraUsd, DEC, firma, log }) {
   log("compiling the one-shot launcher: pool, wall and first buy in one transaction…");
   const file = await compileAll(COMPRA_ATOMICA_SOURCE, log);
