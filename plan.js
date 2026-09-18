@@ -60,6 +60,13 @@ export function planPorDefecto() {
     metadataEditable: false,
     renunciar: true,
 
+    /* DONDE ABRE LA POOL  (18-sep-2026). "v4": la fabrica de basey hace token,
+     * pool V4, muro y compra en UNA transaccion, y el muro bloqueado va al
+     * LaunchLocker de openlaunch (para siempre, comisiones para ti). "v3": como
+     * hasta ahora. Un token que ya existe va siempre por V3: la fabrica solo lanza
+     * tokens que despliega ella. Ver fabrica-v4.js. */
+    pool: "v4",
+
     tramos: [tramoPorDefecto()],
 
     /* LA COMPRA INICIAL, EN LUGAR DEL SUELO.  (17-sep-2026)
@@ -137,10 +144,25 @@ export function quemaDe(plan) {
   return 0;
 }
 
+/* V4 con la fabrica: solo para un token que se despliega aqui. */
+export function usaV4(plan) {
+  return plan.pool === "v4" && plan.modo !== "existente";
+}
+
 export function resumen(plan) {
   const pos = posicionesDe(plan);
   const bloqueos = pos.filter((p) => p.bloquear).length;
   const compra = compraDe(plan);
+  /* En V4: aprobar la USDC de la compra (si hay compra) y launch(). El bloqueo va
+     DENTRO de launch(), asi que no suma firmas. */
+  if (usaV4(plan)) {
+    return {
+      precio: precioDe(plan), pasos: (compra > 0 ? 1 : 0) + 1, usdc: compra, compra,
+      repartido: repartido(plan), tesorería: plan.tesoreríaPct,
+      libre: Math.max(0, 100 - repartido(plan) - plan.tesoreríaPct),
+      bloqueos, quema: 0, sobrante: 0, posiciones: pos, reservas: reservasDe(plan),
+    };
+  }
   return {
     precio: precioDe(plan),
     /* deploy (solo si el plan escribe el token) + aprobar el token + aprobar el
@@ -176,12 +198,16 @@ export function avisosDe(plan) {
     out.push("The wall ends at or below where it starts. Raise \"to × price\" above \"from × price\".");
   }
   if (compraDe(plan) <= 0) {
-    out.push("With no first buy the pool opens without a dollar inside. People can buy, but the first buyer cannot sell until somebody else does.");
+    out.push("With no first buy the pool opens without a dollar inside. People can buy, but the first buyer cannot sell until somebody else does." +
+      (usaV4(plan) ? " And on V4 the pool opens with no liquidity at its price, so anyone can push the price a tracker shows down to nothing, for free, until the first real buy." : ""));
   }
   /* Solo si el plan escribe el contrato. Con un token que ya existe, este aviso
    * hablaba de una funcion que el plan no ha puesto y que puede no estar. */
   if (plan.metadataEditable && plan.modo !== "existente") {
     out.push("setMetadata() stays in the contract, so you can fix the picture and the links later. It is the only owner power this token will have, and until you renounce, a tracker shows this token as NOT renounced. \"Drop ownership\" in Your tokens ends that.");
+  }
+  if (usaV4(plan) && t && t.bloquear) {
+    out.push("The wall is locked FOR GOOD: it is minted straight into the LaunchLocker (openlaunch.lol's contract, copied as is), which has no function to take liquidity out — not for you, not for anyone, ever. Its trading fees stay yours: collect them from What you launched.");
   }
   if (plan.renunciar && plan.modo !== "existente") {
     out.push("Ownership is dropped inside the deploy transaction, so owner() answers the zero address from the first block and nothing about this token can be changed by anyone, you included. The picture and links are already inside the contract.");

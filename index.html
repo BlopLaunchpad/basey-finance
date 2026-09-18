@@ -16,7 +16,7 @@
 <meta name="googlebot" content="noindex, nofollow">
 <!-- Sin `description` a proposito: es lo que un buscador enseña bajo el
      titulo, y aqui no queremos ni titulo ni resumen. -->
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=23">
 </head>
 <body>
 
@@ -412,7 +412,8 @@
   <div class="cols">
     <div class="col-form">
       <h2>Your liquidity</h2>
-      <p class="lede">Every position this wallet holds, with what it is worth doing to it.</p>
+      <p class="lede">Every position this wallet holds, with what it is worth doing to it. V4 walls launched with the basey factory come first.</p>
+      <div id="positionsV4" class="positions"></div>
       <div id="positions" class="positions">
         <p class="empty">Connect a wallet to see your positions.</p>
       </div>
@@ -422,6 +423,8 @@
       <div class="note">
         <h3>Add more</h3>
         <p>Puts more into the same range, on the same NFT. The range itself cannot be moved — a different range is a different position.</p>
+        <h3>Lock for good (V4 walls)</h3>
+        <p>Sends the wall into the LaunchLocker through the factory: two signatures, and it can never be undone. The liquidity stays in the pool for good, and you keep collecting its fees.</p>
         <h3>Lock with a deadline</h3>
         <p>Compiles a locker in your browser, deploys it from your wallet, and sends the position into it. You keep collecting fees the whole time. Only time can release it, and the contract has no admin.</p>
         <h3>Burn permanently</h3>
@@ -454,16 +457,20 @@
           <small id="pExistingInfo">Its supply, symbol and decimals are read from the chain — nothing is typed.</small>
         </label>
 
+        <h2 id="poolH">Pool</h2>
+        <div class="rangeList" id="pPool"></div>
+        <p class="hintRow" id="pFabrica" hidden></p>
+
         <h2 id="identityH">Identity</h2>
         <div class="grid2">
           <label class="field"><span>Name</span><input id="pName" type="text" value="My Token" maxlength="64"></label>
           <label class="field"><span>Symbol</span><input id="pSym" type="text" value="MTK" maxlength="16"></label>
         </div>
         <div class="grid2">
-          <label class="field"><span>Image URL</span><input id="pImage" type="text" placeholder="https://… or ipfs://…"><small>A GIF works. It is a link in your contract — nothing is uploaded here.</small></label>
-          <label class="field"><span>Website</span><input id="pWeb" type="text" placeholder="https://…"></label>
-          <label class="field"><span>X / Twitter</span><input id="pTw" type="text" placeholder="https://x.com/…"></label>
-          <label class="field"><span>Telegram</span><input id="pTg" type="text" placeholder="https://t.me/…"></label>
+          <label class="field"><span>Image URL</span><input id="pImage" type="text" maxlength="2048" placeholder="https://… or ipfs://…"><small>A GIF works. It is a link in your contract — nothing is uploaded here.</small></label>
+          <label class="field"><span>Website</span><input id="pWeb" type="text" maxlength="512" placeholder="https://…"></label>
+          <label class="field"><span>X / Twitter</span><input id="pTw" type="text" maxlength="512" placeholder="https://x.com/…"></label>
+          <label class="field"><span>Telegram</span><input id="pTg" type="text" maxlength="512" placeholder="https://t.me/…"></label>
         </div>
         <label class="field"><span>Description</span><input id="pDesc" type="text" maxlength="300" placeholder="One sentence."></label>
         <label class="radio">
@@ -529,7 +536,9 @@
           <h3>The one thing to watch</h3>
           <p>The wall should ask for tokens and no USDC. If it asks for USDC its range landed on the wrong side of the price — stop instead of signing.</p>
           <h3>Why the first buy cannot be sniped</h3>
-          <p>A one-shot contract, compiled here like the locker, creates the pool, places the wall and buys in its constructor. It is one transaction: there is no moment in which the pool exists without your buy. It checks the pool opens exactly at the plan price, keeps nothing and has no owner. You approve the exact amounts to the address it will have before it exists.</p>
+          <p>On V4 the basey factory deploys the token, opens the pool, places the wall and buys in one call. On V3 a one-shot contract, compiled here like the locker, creates the pool, places the wall and buys in its constructor. Either way it is one transaction: there is no moment in which the pool exists without your buy. Neither keeps anything or has an owner, and you approve the exact USDC of the buy.</p>
+          <h3>Locked for good (V4)</h3>
+          <p>The wall goes into the LaunchLocker, openlaunch.lol's contract copied as is. It has no function that takes liquidity out, so the wall stays in the pool for the life of the chain, and <code>collect()</code> pays you its trading fees. Trackers count that liquidity as burned.</p>
         </div>
       </div>
     </div>
@@ -541,6 +550,7 @@
       <div class="col-form">
         <h2>What you launched</h2>
         <p class="lede">Your tokens and the positions behind them, with everything you can do to them from here.</p>
+        <div id="mineV4" class="positions"></div>
         <div id="mineList" class="positions"></div>
         <button id="mineRefresh" class="btn btn-ghost">Refresh</button>
       </div>
@@ -843,6 +853,6 @@
 
 
 
-<script type="module" src="app.js?v=57"></script>
+<script type="module" src="app.js?v=58"></script>
 </body>
 </html>

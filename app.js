@@ -23,7 +23,10 @@ import * as PAD from "./launchpad.js?v=2";
 import { derivarMadre, derivarClúster, máximoASacar, reservaDeGas,
          repartir, DISPERSE_SOURCE } from "./wallets.js?v=2";
 import { planPorDefecto, resumen as planResumen, avisosDe, precioDe,
-         posicionesDe, compraDe, pctDelMuro, MCAP_POR_DEFECTO } from "./plan.js?v=9";
+         posicionesDe, compraDe, pctDelMuro, MCAP_POR_DEFECTO, SEPARACIÓN_MÍNIMA, usaV4 } from "./plan.js?v=10";
+import { FABRICA_V4, ABI_FABRICA, ABI_LOCKER, USDC_ERC20, V4_ARC, fabricaValida, datosDespliegue,
+         ticksV4, paramsV4, codigoDelToken, argsTokenCodificados, salBase, leerLanzado, motivoV4,
+         nombreErrorV4, precioDeTick } from "./fabrica-v4.js?v=1";
 import { COMPRA_ATOMICA_SOURCE } from "./compra-atomica.js?v=1";
 import { V4, V4_TIERS, POSM_ABI, STATEVIEW_ABI, poolKey, poolId, liquidityFor,
          encodeMint, permit2Steps, HOOK_NOTE } from "./v4.js?v=1";
@@ -486,7 +489,8 @@ function compileAll(source, log) {
 }
 
 function logger(id) {
-  const box = $("#" + id);
+  /* un id, o la caja misma (las tarjetas de los muros V4 llevan cada una la suya) */
+  const box = typeof id === "string" ? $("#" + id) : id;
   return (msg, cls) => {
     box.hidden = false;
     const row = document.createElement("div");
@@ -1638,6 +1642,7 @@ function renderInspect(box, r) {
 async function loadPositions() {
   const box = $("#positions");
   if (!account) return;
+  pintarMurosV4($("#positionsV4"));
   box.textContent = "";
   const loading = document.createElement("p"); loading.className = "empty"; loading.textContent = "reading your positions…";
   box.append(loading);
@@ -2102,6 +2107,8 @@ function pintarModo() {
       // "Size" con un solo campo debajo ya no describe lo que hay ahi: el
       // tamano viene dado y lo unico que se elige es a que precio abre.
       $("#sizeH").textContent = ex ? "Opening price" : "Size";
+      /* un token que ya existe va por V3: la fabrica V4 solo lanza lo que despliega ella */
+      pintarPool();
       if (ex) await leerTokenExistente();
       leerPlan();
     });
@@ -2183,6 +2190,9 @@ function pintarPlan() {
 
   const T = (n) => n >= 1e12 ? (n / 1e12).toFixed(2) + "T" : n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : Math.round(n).toLocaleString("es");
   const existente = PLAN.modo === "existente";
+  /* En V4 todo va en launch(): la tercera columna dice eso, no "1 tx" por fila. */
+  const v4 = usaV4(PLAN);
+  ajustarBloqueoV4();
   const filas = [
     existente
       ? ["Use " + PLAN.símbolo,
@@ -2191,8 +2201,9 @@ function pintarPlan() {
          "—"]
       : ["Deploy " + PLAN.símbolo,
          PLAN.supply.toLocaleString("es") + " supply, " + decDelPlan() + " decimals",
-         "1 tx"],
-    ["Create the pool", "against USDC, 1.00% fee, opening at $" + P0.toExponential(4) + "  (mcap $" + PLAN.mcapObjetivo.toLocaleString("es") + ")", r.compra > 0 ? "atomic" : "in the batch"],
+         v4 ? "in the launch" : "1 tx"],
+    ["Create the pool", "against USDC" + (v4 ? " on Uniswap V4" : "") + ", 1.00% fee, opening at $" + P0.toExponential(4) + "  (mcap $" + PLAN.mcapObjetivo.toLocaleString("es") + ")",
+     v4 ? "in the launch" : r.compra > 0 ? "atomic" : "in the batch"],
   ];
   // El porcentaje AL LADO del numero. "10.000.000" no se lee como "1%" de un
   // vistazo, y eso hizo dudar de un calculo que estaba bien. Un numero que
@@ -2200,13 +2211,23 @@ function pintarPlan() {
   const pct = (n) => " (" + ((n / PLAN.supply) * 100).toFixed(n / PLAN.supply < 0.01 ? 2 : 0) + "% of supply)";
   for (const p of r.posiciones) {
     const que = p.tokens > 0 ? T(p.tokens) + " tokens" + pct(p.tokens) + ", no USDC" : "$" + p.usdc + " USDC, no tokens";
-    const cierre = p.bloquear ? "  ·  locked " + p.meses + " months" : "";
+    const cierre = !p.bloquear ? "" : v4 ? "  ·  LOCKED FOR GOOD in the LaunchLocker, fees yours" : "  ·  locked " + p.meses + " months";
     const junto = r.compra > 0 ? "atomic" : "in the batch";
-    filas.push([p.etiqueta, que + "  ·  $" + p.min.toExponential(3) + " → $" + p.max.toExponential(3) + cierre, p.bloquear ? junto + " + 2 tx" : junto]);
+    /* En V4, los precios de los ticks que se van a firmar (bordes al espaciado de
+       200 ticks, ~2 %), no los del plan: lo que se ve es lo que se firma. */
+    let pMin = p.min, pMax = p.max;
+    if (v4) {
+      try {
+        const tk = ticksV4(P0, Math.max(PLAN.tramos[0].desde, SEPARACIÓN_MÍNIMA), PLAN.tramos[0].hasta);
+        pMin = precioDeTick(tk.wallUpper); pMax = precioDeTick(tk.wallLower);
+      } catch { /* un plan imposible ya lo dice el aviso; se pinta el del plan */ }
+    }
+    filas.push([p.etiqueta, que + "  ·  $" + pMin.toExponential(3) + " → $" + pMax.toExponential(3) + cierre,
+                v4 ? "in the launch" : p.bloquear ? junto + " + 2 tx" : junto]);
   }
   /* LA COMPRA INICIAL, EN LA MISMA TRANSACCION QUE LA POOL. Ver compra-atomica.js. */
   if (r.compra > 0) {
-    filas.push(["First buy", "$" + r.compra + " USDC  ·  in the same transaction that creates the pool and the wall — nobody can buy before you", "atomic"]);
+    filas.push(["First buy", "$" + r.compra + " USDC  ·  in the same transaction that creates the pool and the wall — nobody can buy before you", v4 ? "in the launch" : "atomic"]);
   }
   /* LO QUE TE QUEDAS TU, EN UNA SOLA FILA.
    *
@@ -2411,6 +2432,13 @@ async function ejecutarPlan() {
      * "firma is not defined" en la primera linea de despues del if. */
     let paso = 0;
     const firma = (q) => { paso++; log("sign " + paso + " of " + r.pasos + ": " + q); };
+
+    /* V4 CON LA FABRICA DE BASEY (18-sep-2026): token, pool, muro y compra en una
+       transaccion. Todo lo de abajo es el camino V3, que sigue igual. */
+    if (usaV4(PLAN)) {
+      await lanzarV4({ log, firma, r });
+      return;
+    }
 
     let dir;
     if (PLAN.modo === "existente") {
@@ -2878,9 +2906,394 @@ async function compraInicialSuelta({ dir, amtCompra, compraUsd, routerAprobado, 
     ? " (at least " + Number(ethers.formatUnits(minOut, DEC)).toLocaleString("es") + " " + PLAN.símbolo + ")" : ""), "ok");
 }
 
+/* ── EL PASO 6 EN V4, CON LA FABRICA DE BASEY  (18-sep-2026) ─────────────
+ * Lo que importa del contrato esta en fabrica-v4.js y en
+ * contratos-v4/src/BaseyLaunchFactoryV4.sol. Aqui, en orden:
+ *   1. si un lanzamiento anterior se envio y no se vio minar, se mira que fue de
+ *      el ANTES de lanzar otro: el 18-sep un nodo acepto un despliegue y no lo
+ *      paso a nadie, y relanzar a ciegas podria acabar en dos tokens;
+ *   2. findSalt(): la direccion del token, por encima de la USDC;
+ *   3. aprobar la USDC EXACTA de la compra a la fabrica, si hace falta;
+ *   4. un ENSAYO de launch() contra la cadena: si fuera a revertir se para aqui,
+ *      sin gastar mas que la aprobacion, y de paso dice cuanto compra la compra
+ *      inicial, que luego se exige con un 1 % de margen;
+ *   5. launch(), y el token se lee del evento Launched del recibo. */
+const FABRICA_KEY = "basey.fabricaV4";
+const PEND_V4_KEY = "basey.v4.pendiente";
+/* Solo se recuerda un SI: un nodo mudo no puede dejar marcada como mala una fabrica buena. */
+let fabricaBuena = null;
+function fabricaGuardada() {
+  if (FABRICA_V4) return FABRICA_V4;
+  try { return localStorage.getItem(FABRICA_KEY) || ""; } catch { return ""; }
+}
+async function fabricaV4() {
+  const dir = fabricaGuardada();
+  if (!dir) return null;
+  if (fabricaBuena === dir) return dir;
+  if (await fabricaValida(dir, callRead)) { fabricaBuena = dir; return dir; }
+  return null;
+}
+const dormir = (ms) => new Promise((ok) => setTimeout(ok, ms));
+function pendienteV4() { try { return JSON.parse(localStorage.getItem(PEND_V4_KEY) || "null"); } catch { return null; } }
+function apuntarPendienteV4(v) {
+  try { if (v) localStorage.setItem(PEND_V4_KEY, JSON.stringify(v)); else localStorage.removeItem(PEND_V4_KEY); } catch { /* modo privado */ }
+}
+
+/* Un lanzamiento enviado y no visto minar. Manda la cadena: si el token tiene
+   codigo, salio; si un nodo aun tiene la transaccion SIN minar, se espera; si ya
+   se mino sin token (revirtio) o nadie la tiene, se puede lanzar otra vez. */
+async function revisarPendienteV4(log) {
+  const p = pendienteV4();
+  if (!p || !p.token) return;
+  let codigo = "0x";
+  try { codigo = await rawCall("eth_getCode", [p.token, "latest"]); } catch { /* sin respuesta: se mira la tx */ }
+  if (codigo && codigo !== "0x") {
+    remember({ address: ethers.getAddress(p.token), name: p.name, symbol: p.symbol, decimals: 18,
+               image: p.image, at: new Date(p.at || Date.now()).toISOString(), v4: true });
+    apuntarPendienteV4(null);
+    pintarMios();
+    throw new Error("the launch sent earlier DID go through: " + p.symbol + " at " + p.token +
+                    " — nothing new was launched, it is in What you launched");
+  }
+  if (p.hash) {
+    let tx = null;
+    try { tx = await rawCall("eth_getTransactionByHash", [p.hash]); } catch { /* ningun nodo contesta */ }
+    if (tx && !tx.blockNumber) {
+      throw new Error("the launch sent earlier (" + p.hash + ") is still pending on a node — wait a minute and run again; nothing new was sent");
+    }
+  }
+  log("a launch prepared earlier never made it onto the chain — starting a new one", "ok");
+  apuntarPendienteV4(null);
+}
+
+async function lanzarV4({ log, firma, r }) {
+  const fab = await fabricaV4();
+  if (!fab) throw new Error("the basey V4 factory is not deployed yet — deploy it once from Pool, above, or choose Uniswap V3");
+  await revisarPendienteV4(log);
+
+  const editable = !!PLAN.metadataEditable;
+  const argsToken = argsDelToken(PLAN);
+  const muro = r.posiciones[0];
+  if (!muro || !(muro.tokens > 0)) throw new Error("the wall holds no tokens — lower the treasury share");
+  const t = PLAN.tramos[0];
+  const bloquear = !!t.bloquear;
+  const ticks = ticksV4(precioDe(PLAN), Math.max(t.desde, SEPARACIÓN_MÍNIMA), t.hasta);
+  const wallTokens = ethers.parseUnits(String(Math.floor(muro.tokens)), 18);
+  const compraUsd = compraDe(PLAN);
+  const buyUsdc = compraUsd > 0 ? ethers.parseUnits(compraUsd.toFixed(QUOTE.decimals), QUOTE.decimals) : 0n;
+  log("Uniswap V4 through the basey factory " + fab + " · opening tick " + ticks.startTick +
+      ", wall " + ticks.wallLower + " → " + ticks.wallUpper + " · " +
+      (bloquear ? "the wall goes LOCKED FOR GOOD into the LaunchLocker" : "the wall stays in your wallet, unlocked"));
+
+  if (buyUsdc > 0n) {
+    let bal = null;
+    try { [bal] = await callRead(QUOTE.address, ERC20_ABI, "balanceOf", [account]); } catch { /* sin leer: lo dira el ensayo */ }
+    if (bal !== null && BigInt(bal) < buyUsdc) {
+      throw new Error("the first buy needs $" + compraUsd + " USDC and the wallet holds $" +
+                      ethers.formatUnits(bal, QUOTE.decimals) + " — nothing was signed");
+    }
+  }
+
+  log("finding a token address above USDC…");
+  const [salt, previsto] = await callRead(fab, ABI_FABRICA, "findSalt",
+    [account, salBase(), codigoDelToken(editable), argsTokenCodificados(argsToken), 64]);
+  log(PLAN.símbolo + " will be deployed at " + previsto, "ok");
+
+  let aprobado = buyUsdc === 0n;
+  if (!aprobado) {
+    try { const [cur] = await callRead(QUOTE.address, ERC20_ABI, "allowance", [account, fab]); aprobado = BigInt(cur) >= buyUsdc; }
+    catch { /* sin leer se pide: aprobar una vez de mas no pierde nada */ }
+  }
+  r.pasos = (aprobado ? 0 : 1) + 1;
+  if (!aprobado) {
+    firma("approve exactly $" + compraUsd + " USDC to the basey V4 factory, for the first buy");
+    const tx = await new ethers.Contract(QUOTE.address, ERC20_ABI, signer).approve(fab, buyUsdc);
+    log("sent: " + tx.hash + " — waiting for it to be mined…", "ok");
+    await esperarMinada(tx, log);
+    log("USDC approved", "ok");
+  } else if (buyUsdc > 0n) {
+    log("the factory already has the USDC approved", "ok");
+  }
+
+  const fabC = new ethers.Contract(fab, ABI_FABRICA, signer);
+  const base = paramsV4({ editable, argsToken, salt, lpFee: PLAN.fee, ticks, wallTokens,
+                          lock: bloquear, buyUsdc, minTokensOut: 0n });
+  log("dry run of the launch against the chain, before you sign it…");
+  let ensayo = null;
+  for (let k = 0; !ensayo; k++) {
+    try { ensayo = await fabC.launch.staticCall(base); }
+    catch (e) {
+      const n = nombreErrorV4(e);
+      /* el nodo que ensaya puede no haber visto aun la aprobacion recien minada */
+      if (k < 5 && buyUsdc > 0n && (n === "TransferFailed" || !n)) { await dormir(1500); continue; }
+      throw new Error("the dry run reverted: " + (motivoV4(e) || readableError(e)) + " — nothing was launched" +
+                      (aprobado ? "" : " (only the USDC approval was signed)"));
+    }
+  }
+  const [tokenEnsayo, , compradosEnsayo] = ensayo;
+  if (String(tokenEnsayo).toLowerCase() !== String(previsto).toLowerCase()) {
+    throw new Error("the dry run put the token at " + tokenEnsayo + ", not at " + previsto + " — stopped, nothing was launched");
+  }
+  /* Una compra que no compraria nada (precios en un extremo, revision del 18-sep) se
+     para aqui: pagar USDC por cero tokens no es un lanzamiento. */
+  if (buyUsdc > 0n && BigInt(compradosEnsayo) === 0n) {
+    throw new Error("the first buy would get 0 " + PLAN.símbolo + " at this price — check the market cap and the supply; nothing was launched");
+  }
+  const minOut = buyUsdc > 0n ? (BigInt(compradosEnsayo) * 99n) / 100n : 0n;
+  log(buyUsdc > 0n
+    ? "dry run ok: the first buy gets " + Number(ethers.formatUnits(compradosEnsayo, 18)).toLocaleString("es") + " " +
+      PLAN.símbolo + ", and the launch will demand at least 99% of that"
+    : "dry run ok", "ok");
+
+  firma("deploy " + PLAN.símbolo + ", open the V4 pool, place the wall" + (bloquear ? " locked for good" : "") +
+        (buyUsdc > 0n ? " and buy $" + compraUsd : "") + " — ONE transaction, nobody buys in between");
+  const nota = { token: previsto, name: PLAN.nombre, symbol: PLAN.símbolo, image: PLAN.imagen, at: Date.now() };
+  apuntarPendienteV4(nota);
+  let tx;
+  try { tx = await fabC.launch({ ...base, minTokensOut: minOut }); }
+  catch (e) {
+    apuntarPendienteV4(null);
+    throw new Error((motivoV4(e) || readableError(e)) + " — nothing was launched");
+  }
+  apuntarPendienteV4({ ...nota, hash: tx.hash });
+  log("sent: " + tx.hash + " · nonce " + tx.nonce + " — waiting for it to be mined…", "ok");
+  const rec = await esperarMinada(tx, log);
+  apuntarPendienteV4(null);
+
+  const hecho = leerLanzado(rec, fab);
+  const dir = ethers.getAddress(hecho ? hecho.token : previsto);
+  remember({ address: dir, name: PLAN.nombre, symbol: PLAN.símbolo, decimals: 18, image: PLAN.imagen,
+             at: new Date().toISOString(), v4: true });
+  log("token at " + dir + " · V4 wall #" + (hecho ? hecho.tokenId : "?") +
+      (bloquear ? " — locked for good in the LaunchLocker, its fees go to you" : " — in your wallet, not locked"), "ok");
+  if (hecho && buyUsdc > 0n) {
+    log("first buy: $" + compraUsd + " → " + Number(ethers.formatUnits(hecho.tokensBought, 18)).toLocaleString("es") +
+        " " + PLAN.símbolo + ", in the same transaction — nobody bought before you", "ok");
+  }
+  log("PLAN COMPLETE — token " + dir + " · tx " + rec.hash, "ok");
+  $("#poolTokenA").value = dir;
+  onPairChange(); renderTokenList(); pintarMios();
+}
+
+/* LA FABRICA SE DESPLIEGA UNA VEZ, desde la cartera que sea: no tiene dueño ni
+   admin, asi que quien la despliega no se queda con ningun poder sobre ella. */
+async function desplegarFabricaV4() {
+  const log = logger("pLog");
+  if (!signer) { log("connect a wallet first"); await connect(); }
+  if (!signer) { log("no wallet — nothing was done", "err"); return; }
+  if (!confirm("Deploy the basey V4 factory from " + account + "?\n\nIt is deployed once and every V4 launch uses it. " +
+               "It has no owner and no admin: nobody, you included, can change it or take anything through it.")) return;
+  try {
+    log("deploying the basey V4 factory, and inside it the LaunchLocker…");
+    const tx = await signer.sendTransaction({ data: datosDespliegue() });
+    log("sent: " + tx.hash + " · nonce " + tx.nonce + " — waiting for it to be mined…", "ok");
+    const rec = await esperarMinada(tx, log, 120000);
+    const dir = ethers.getAddress(rec.contractAddress || ethers.getCreateAddress({ from: tx.from, nonce: tx.nonce }));
+    if (!(await fabricaValida(dir, callRead))) throw new Error("deployed at " + dir + " but it does not answer as this page expects — not saved");
+    try { localStorage.setItem(FABRICA_KEY, dir); } catch { /* modo privado */ }
+    fabricaBuena = dir;
+    const [lk] = await callRead(dir, ABI_FABRICA, "locker");
+    log("factory at " + dir + " · its LaunchLocker at " + lk + " · gas " + Number(rec.gasUsed).toLocaleString("es"), "ok");
+    log("saved in this browser. It goes into the page for every browser with the next update, once it is verified on the explorers.", "ok");
+    pintarPool();
+  } catch (e) { log(readableError(e), "err"); }
+}
+
+const POOLS = [
+  { id: "v4", name: "Uniswap V4, with the basey factory",
+    what: "token, pool, wall and first buy in ONE transaction",
+    like: "Two signatures at most: the USDC of the first buy, and the launch. Lock the wall and it goes straight into the LaunchLocker, openlaunch.lol's contract copied as is: there is no function to take the liquidity out, ever, and the fees are paid to you. Trackers count that as burned." },
+  { id: "v3", name: "Uniswap V3, as before",
+    what: "the token first, then the pool, the wall and the buy",
+    like: "Four signatures. A lock here is time-limited, with a locker compiled in your browser." },
+];
+function pintarPool() {
+  const box = $("#pPool");
+  if (!box) return;
+  const ex = PLAN.modo === "existente";
+  $("#poolH").hidden = ex;
+  box.hidden = ex;
+  box.textContent = "";
+  for (const m of POOLS) {
+    const lab = document.createElement("label"); lab.className = "radio";
+    const inp = document.createElement("input");
+    inp.type = "radio"; inp.name = "ppool"; inp.value = m.id; inp.checked = (PLAN.pool || "v4") === m.id;
+    const sp = document.createElement("span");
+    const b = document.createElement("b"); b.textContent = m.name;
+    sp.append(b, document.createTextNode(" — " + m.what), qmark(m.like, m.name));
+    lab.append(inp, sp);
+    inp.addEventListener("change", () => { PLAN.pool = m.id; pintarPool(); leerPlan(); });
+    box.append(lab);
+  }
+  const f = $("#pFabrica");
+  f.textContent = "";
+  f.hidden = ex || PLAN.pool !== "v4";
+  if (f.hidden) return;
+  const dir = fabricaGuardada();
+  const txt = document.createElement("span");
+  f.append(txt);
+  if (!dir) {
+    txt.textContent = "The factory is not deployed yet. It is deployed once, from any wallet, and every V4 launch after it uses it. ";
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn btn-sm"; b.textContent = "Deploy the factory";
+    b.addEventListener("click", (e) => { e.preventDefault(); desplegarFabricaV4(); });
+    f.append(b);
+    return;
+  }
+  txt.textContent = "Factory " + dir + " — checking…";
+  fabricaV4().then((ok) => {
+    txt.textContent = ok
+      ? "Factory " + dir + " — answers as this page expects."
+      : "Factory " + dir + " — does NOT answer as this page expects (or no node is answering). Choose V3, or try again.";
+  });
+}
+
+/* En V4 un bloqueo es para siempre: el campo de meses no pinta nada. */
+function ajustarBloqueoV4() {
+  const v4 = usaV4(PLAN);
+  $$("#pStages .stage-lock").forEach((lk) => {
+    const s = lk.querySelector(":scope > span"); if (s) s.textContent = v4 ? "Lock for good" : "Lock";
+    const mo = lk.querySelector(".s-months"); if (mo) mo.hidden = v4;
+    const un = lk.querySelector(".lockRow .unit"); if (un) un.hidden = v4;
+  });
+}
+
+/* LOS MUROS V4: bloquear para siempre y cobrar comisiones.  (18-sep-2026)
+ * Salen de los tokens de este navegador (saved()) que la fabrica reconoce con
+ * infoOf(): lo que manda es lo que contesta la cadena, no lo que se apunto. */
+async function pintarMurosV4(box) {
+  if (!box) return;
+  box.textContent = "";
+  let fab = null;
+  try { fab = await fabricaV4(); } catch { /* sin fabrica no hay muros V4 */ }
+  if (!fab) return;
+  let locker;
+  try { [locker] = await callRead(fab, ABI_FABRICA, "locker"); } catch { return; }
+  for (const t of saved()) {
+    let info;
+    try { info = await callRead(fab, ABI_FABRICA, "infoOf", [t.address]); } catch { continue; }
+    if (!info || String(info[1]) === ethers.ZeroAddress) continue;
+    box.append(tarjetaMuroV4(t, info, fab, locker, () => pintarMurosV4(box)));
+  }
+}
+
+function tarjetaMuroV4(t, info, fab, locker, refrescar) {
+  const tokenId = BigInt(info[0]);
+  const bloqueado = !!info[4];
+  const sym = t.symbol || "?";
+  const el = document.createElement("div"); el.className = "pos";
+  const head = document.createElement("div"); head.className = "pos-head";
+  const pair = document.createElement("span"); pair.className = "pos-pair";
+  pair.textContent = sym + " / USDC · V4 · " + (Number(info[3]) / 10000).toFixed(2) + "%";
+  const idEl = document.createElement("span"); idEl.className = "pos-id"; idEl.textContent = "wall #" + tokenId;
+  head.append(pair, idEl);
+  const estado = document.createElement("div"); estado.className = "pos-kind";
+  const fees = document.createElement("div"); fees.className = "pos-kind";
+  const acc = document.createElement("div"); acc.className = "pos-actions";
+  const caja = document.createElement("div"); caja.className = "log"; caja.hidden = true;
+  const log = logger(caja);
+  el.append(head, estado, fees, acc, caja);
+  const boton = (txt, fn, cls) => {
+    const b = document.createElement("button"); b.className = "btn btn-sm " + (cls || ""); b.textContent = txt;
+    b.addEventListener("click", async () => {
+      if (!signer) await connect();
+      if (!signer) { log("no wallet — nothing was done", "err"); return; }
+      b.disabled = true;
+      try { await fn(); } catch (e) { log((motivoV4(e) || readableError(e)), "err"); } finally { b.disabled = false; }
+    });
+    acc.append(b); return b;
+  };
+  const cantidad = (v, dec) => Number(ethers.formatUnits(v, dec)).toLocaleString("es", { maximumFractionDigits: dec === 6 ? 4 : 0 });
+
+  if (bloqueado) {
+    estado.textContent = "LOCKED FOR GOOD in the LaunchLocker " + locker +
+      " — no function can take this liquidity out.";
+    /* A quien van las comisiones lo dice el locker, no se supone: quien bloquea
+       despues puede no ser quien lanzo (revision del 18-sep). */
+    callRead(locker, ABI_LOCKER, "recipientsOf", [tokenId]).then(([rs]) => {
+      const quien = Array.from(rs).map((x) =>
+        (account && String(x[0]).toLowerCase() === account.toLowerCase() ? "you" : String(x[0])) +
+        " (" + (Number(x[1]) / 100) + "%)").join(", ");
+      estado.textContent = "LOCKED FOR GOOD in the LaunchLocker " + locker +
+        " — no function can take this liquidity out. Its trading fees go to " + quien + ".";
+    }).catch(() => { /* se queda el texto sin destinatarios */ });
+    /* lo que cobraria un collect() ahora mismo: el mismo collect, ensayado */
+    fees.textContent = "reading the fees waiting…";
+    const iL = new ethers.Interface(ABI_LOCKER);
+    rawCall("eth_call", [{ from: account || ethers.ZeroAddress, to: locker, data: iL.encodeFunctionData("collect", [tokenId]) }, "latest"])
+      .then((res) => {
+        const [q, tk] = iL.decodeFunctionResult("collect", res);
+        fees.textContent = "fees waiting: $" + cantidad(q, 6) + " USDC + " + cantidad(tk, 18) + " " + sym;
+      })
+      .catch(() => { fees.textContent = ""; });
+    boton("Collect fees", async () => {
+      log("collecting the fees of wall #" + tokenId + " — anyone can call this, and they are paid to the launcher");
+      const tx = await new ethers.Contract(locker, ABI_LOCKER, signer).collect(tokenId);
+      log("sent: " + tx.hash, "ok");
+      await esperarMinada(tx, log);
+      log("collected", "ok");
+      refrescar();
+    });
+    /* Si un pago no pudo entregarse, se queda apuntado a tu nombre: claim(). */
+    if (account) {
+      for (const [moneda, dec, nombre] of [[USDC_ERC20, 6, "USDC"], [t.address, 18, sym]]) {
+        callRead(locker, ABI_LOCKER, "claimable", [account, moneda]).then(([v]) => {
+          if (BigInt(v) === 0n) return;
+          boton("Claim " + cantidad(v, dec) + " " + nombre, async () => {
+            const tx = await new ethers.Contract(locker, ABI_LOCKER, signer).claim(moneda);
+            log("sent: " + tx.hash, "ok");
+            await esperarMinada(tx, log);
+            log("claimed", "ok");
+            refrescar();
+          });
+        }).catch(() => { /* sin leer, sin boton */ });
+      }
+    }
+    return el;
+  }
+
+  estado.textContent = "reading who holds the wall…";
+  callRead(V4_ARC.positionManager, POSM_ABI, "ownerOf", [tokenId]).then(([dueño]) => {
+    const mio = account && String(dueño).toLowerCase() === account.toLowerCase();
+    estado.textContent = "NOT locked — the wall is in " + (mio ? "this wallet" : dueño) +
+      ". Locking it sends it to the LaunchLocker for good; the fees stay yours.";
+    if (!mio) return;
+    boton("Lock for good", async () => {
+      if (!confirm("Lock wall #" + tokenId + " of " + sym + " FOR GOOD?\n\nIt goes into the LaunchLocker, which has no function " +
+                   "to take liquidity out — not for you, not for anyone, ever. The trading fees stay yours.\n\nThis cannot be undone.")) return;
+      const posm = new ethers.Contract(V4_ARC.positionManager, POSM_ABI.concat(["function approve(address,uint256)"]), signer);
+      log("sign 1 of 2: let the factory move wall #" + tokenId);
+      const tx1 = await posm.approve(fab, tokenId);
+      log("sent: " + tx1.hash, "ok");
+      await esperarMinada(tx1, log);
+      log("sign 2 of 2: lock it");
+      const tx2 = await new ethers.Contract(fab, ABI_FABRICA, signer).lockPosition(tokenId, []);
+      log("sent: " + tx2.hash, "ok");
+      await esperarMinada(tx2, log);
+      log("locked for good, fees to you", "ok");
+      refrescar();
+    }, "btn-primary");
+    boton("Collect fees", async () => {
+      /* DECREASE_LIQUIDITY de CERO + TAKE_PAIR: solo se mueven las comisiones */
+      const abi = ethers.AbiCoder.defaultAbiCoder();
+      const datos = abi.encode(["bytes", "bytes[]"], ["0x0111", [
+        abi.encode(["uint256", "uint256", "uint128", "uint128", "bytes"], [tokenId, 0n, 0n, 0n, "0x"]),
+        abi.encode(["address", "address", "address"], [USDC_ERC20, t.address, account]),
+      ]]);
+      const posm = new ethers.Contract(V4_ARC.positionManager, POSM_ABI, signer);
+      const tx = await posm.modifyLiquidities(datos, Math.floor(Date.now() / 1000) + 1800);
+      log("sent: " + tx.hash, "ok");
+      await esperarMinada(tx, log);
+      log("fees collected to this wallet", "ok");
+    });
+  }).catch(() => { estado.textContent = "NOT locked — could not read who holds wall #" + tokenId; });
+  return el;
+}
+
 /* ── 6b · lo que lanzaste ──────────────────────────────────────────────── */
 
 async function pintarMios() {
+  pintarMurosV4($("#mineV4"));
   const box = $("#mineList");
   box.textContent = "";
   const list = saved();
@@ -4768,6 +5181,7 @@ renderMetaModes();
 renderVersions();
 renderSupplyChips();
 pintarModo();
+pintarPool();
 pintarTramos();
 pintarChips();
 pintarPlan();

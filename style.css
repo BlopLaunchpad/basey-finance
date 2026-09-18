@@ -297,6 +297,8 @@ input[inputmode="decimal"], input[inputmode="numeric"], #poolToken {
   color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 3px; }
 
 .rangeList { display: flex; flex-direction: column; gap: 8px; }
+/* el aviso de la fabrica V4 va debajo de las dos opciones de pool, no pegado */
+#pFabrica { margin: 10px 0 18px; align-items: center; }
 .radio em.needs { color: var(--text-faint); font-size: 12px; margin-top: 5px; }
 
 .rangeOut { border: 1px solid var(--line); border-left: 3px solid var(--accent);

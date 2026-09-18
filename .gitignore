@@ -5,3 +5,7 @@ node_modules/
 venues.js
 # notas internas: este repo se SIRVE en basey.finance, un .md aqui seria publico
 BASEY.md
+# dependencias de los contratos V4, bajadas por tools/compilar-v4.mjs de sus commits fijados
+contratos-v4/.deps/
+# lo que compila tools/compilar-v4.mjs: se regenera, y la pagina usa fabrica-v4-codigo.js
+contratos-v4/out/
