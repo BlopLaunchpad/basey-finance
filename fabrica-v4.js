@@ -29,11 +29,12 @@ import { CREACION_FABRICA, CODIGO_TOKEN, CODIGO_EDITABLE, HASH_TOKEN, HASH_EDITA
 
 export { ABI_FABRICA, ABI_LOCKER, HASH_TOKEN, HASH_EDITABLE };
 
-/* LA FABRICA, UNA SOLA VEZ Y PARA TODOS LOS LANZAMIENTOS. Vacia hasta que el
-   dueño la despliegue desde la pagina; entonces se escribe aqui (y se verifica
-   con su locker en los tres exploradores). Mientras este vacia, la pagina usa la
-   que este navegador haya desplegado (ver fabricaGuardada). */
-export const FABRICA_V4 = "";
+/* LA FABRICA, UNA SOLA VEZ Y PARA TODOS LOS LANZAMIENTOS. Si esto estuviera vacio,
+   la pagina usaria la que haya desplegado ese navegador (ver fabricaGuardada).
+   Desplegada por el dueño el 18-sep-2026 a las 04:01 UTC (tx 0xc8960187…951c3, 3.696.409 de gas);
+   su LaunchLocker es 0xA4a3128a2c38bcc40044b93C3aFC0AB4DbEa338F. Comprobadas byte a byte contra lo compilado
+   y verificadas (tools/verificar-fabrica-v4.mjs): Sourcify exact_match y arc.etherscan.io. */
+export const FABRICA_V4 = "0x447D2E07B8C5E0f46DE3A6126606549fEa2f93c7";
 
 export const USDC_ERC20 = "0x3600000000000000000000000000000000000000";
 export const V4_ARC = {

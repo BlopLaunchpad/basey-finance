@@ -26,7 +26,7 @@ import { planPorDefecto, resumen as planResumen, avisosDe, precioDe,
          posicionesDe, compraDe, pctDelMuro, MCAP_POR_DEFECTO, SEPARACIÓN_MÍNIMA, usaV4 } from "./plan.js?v=10";
 import { FABRICA_V4, ABI_FABRICA, ABI_LOCKER, USDC_ERC20, V4_ARC, fabricaValida, datosDespliegue,
          ticksV4, paramsV4, codigoDelToken, argsTokenCodificados, salBase, leerLanzado, motivoV4,
-         nombreErrorV4, precioDeTick } from "./fabrica-v4.js?v=1";
+         nombreErrorV4, precioDeTick } from "./fabrica-v4.js?v=2";
 import { COMPRA_ATOMICA_SOURCE } from "./compra-atomica.js?v=1";
 import { V4, V4_TIERS, POSM_ABI, STATEVIEW_ABI, poolKey, poolId, liquidityFor,
          encodeMint, permit2Steps, HOOK_NOTE } from "./v4.js?v=1";
