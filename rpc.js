@@ -106,8 +106,20 @@
  *
  * Se conservan los cuatro y NO se echa a nadie: el que falla se castiga 15 s y
  * pasa al fondo solo. Sacar un nodo de la lista por un mal rato ya salio mal
- * dos veces en este proyecto. */
+ * dos veces en este proyecto.
+ *
+ * 18-sep-2026: ENTRA EL OFICIAL, rpc.mainnet.arc.io, DE PRIMERO. Dos envios de la
+ * rapida se perdieron igual: un nodo devolvio el hash y no paso la transaccion a
+ * nadie (el despliegue del token a las 02:14 UTC y la aprobacion del primer
+ * lanzamiento en V4 a las 04:25). La segunda vez, medido: ningun nodo la tenia, y
+ * UNO de los de detras de arc.drpc.org (1 de cada 5 lecturas) seguia dando el
+ * nonce pendiente uno por encima -- el siguiente envio habria salido con un nonce
+ * que no mina nunca. El oficial, medido ese dia con Origin https://basey.finance:
+ * CORS que nombra a basey.finance (max-age 3600), lotes de 5 bien, text/plain
+ * bien, 30 de 30 seguidas con mediana de 65 ms, y el nonce bueno. Ademas cada
+ * envio aceptado se reparte ahora a los demas nodos: ver `repartir`. */
 export const NODOS_ARC = [
+  "https://rpc.mainnet.arc.io",
   "https://arc.drpc.org",
   "https://rpc.arc-scan.org",
   "https://thecusp.io/api/arc-rpc",
@@ -210,7 +222,7 @@ export const LOTE_MAXIMO = 20;
  * JSON y como text/plain: arc-scan 4 de 8 con los dos tipos (sus 503 caen en
  * el mismo instante a los dos), niorfun 6 de 8 con los dos (un timeout
  * compartido y uno suelto en cada tipo). Los fallos son del nodo, no del tipo. */
-export const SIN_PREFLIGHT = new Set(["rpc.arc-scan.org", "niorfun.com"]);
+export const SIN_PREFLIGHT = new Set(["rpc.mainnet.arc.io", "rpc.arc-scan.org", "niorfun.com"]);
 const PROXY_CON_PRESUPUESTO = "thecusp.io";
 
 const METODOS_DE_ENVIO = new Set(["eth_sendRawTransaction", "eth_sendTransaction"]);
@@ -786,7 +798,25 @@ export function crearProveedorRotativo(ethers, nodos, opciones = {}) {
         const antes = sueloNonce(desde);
         nonceMinimo.set(desde, { n: Math.max(antes ?? 0, nonce + 1), t: Date.now() });
       }
+      repartir(url);
       return { estado: "aceptada", url, hash: h, resp: { jsonrpc: "2.0", id: p.id, result: h } };
+    };
+    /* Y A TODOS LOS DEMAS.  (18-sep-2026) Un nodo que devuelve el hash no garantiza
+     * que la transaccion llegue a quien mina: dos veces se quedo en el nodo que la
+     * acepto (ver NODOS_ARC). Los MISMOS bytes firmados son la MISMA transaccion, con
+     * el mismo hash y el mismo nonce: mandarla a todos no puede duplicar nada, y
+     * basta con que uno la pase. Solo bytes firmados, solo a nodos que han dicho la
+     * cadena 5042 (la regla de siempre: nada firmado a quien no la ha dicho), sin
+     * esperar, y sin castigar ni apuntar nada por lo que contesten: "already known",
+     * "nonce too low" o un 429 de estos no cambian lo que ya se sabe del envio. */
+    const repartir = (url) => {
+      if (typeof firmada !== "string") return;
+      for (const otro of nodos) {
+        if (otro === url || excluidos.has(otro)) continue;
+        confirmarCadena(otro)
+          .then((c) => (c.motivo ? null : pedir(fetchFn, otro, p, TIEMPOS.envioMs)))
+          .catch(() => { /* un reparto que falla no es un envio que falla */ });
+      }
     };
     const dudosa = (url, texto) => {
       castigar(url);

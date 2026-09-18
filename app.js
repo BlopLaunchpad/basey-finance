@@ -30,7 +30,7 @@ import { FABRICA_V4, ABI_FABRICA, ABI_LOCKER, USDC_ERC20, V4_ARC, fabricaValida,
 import { COMPRA_ATOMICA_SOURCE } from "./compra-atomica.js?v=1";
 import { V4, V4_TIERS, POSM_ABI, STATEVIEW_ABI, poolKey, poolId, liquidityFor,
          encodeMint, permit2Steps, HOOK_NOTE } from "./v4.js?v=1";
-import { crearProveedorRotativo, NODOS_ARC } from "./rpc.js?v=2";
+import { crearProveedorRotativo, NODOS_ARC } from "./rpc.js?v=3";
 import * as MOTOR from "./motor-rutas.js?v=1";
 
 const SOLC = "https://binaries.soliditylang.org/bin/soljson-v0.8.24+commit.e11b9ed9.js";
