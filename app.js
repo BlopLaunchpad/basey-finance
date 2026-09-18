@@ -23,10 +23,12 @@ import * as PAD from "./launchpad.js?v=2";
 import { derivarMadre, derivarClúster, máximoASacar, reservaDeGas,
          repartir, DISPERSE_SOURCE } from "./wallets.js?v=2";
 import { planPorDefecto, resumen as planResumen, avisosDe, precioDe,
-         posicionesDe, compraDe, pctDelMuro, MCAP_POR_DEFECTO, SEPARACIÓN_MÍNIMA, usaV4 } from "./plan.js?v=10";
+         posicionesDe, compraDe, pctDelMuro, MCAP_POR_DEFECTO, SEPARACIÓN_MÍNIMA, usaV4,
+         problemaDeIdentidad } from "./plan.js?v=11";
 import { FABRICA_V4, ABI_FABRICA, ABI_LOCKER, USDC_ERC20, V4_ARC, fabricaValida, datosDespliegue,
          ticksV4, paramsV4, codigoDelToken, argsTokenCodificados, salBase, leerLanzado, motivoV4,
-         nombreErrorV4, precioDeTick } from "./fabrica-v4.js?v=2";
+         nombreErrorV4, precioDeTick, datosCobrarV4, datosRetirarV4, datosAñadirV4,
+         rangoDeInfo } from "./fabrica-v4.js?v=3";
 import { COMPRA_ATOMICA_SOURCE } from "./compra-atomica.js?v=1";
 import { V4, V4_TIERS, POSM_ABI, STATEVIEW_ABI, poolKey, poolId, liquidityFor,
          encodeMint, permit2Steps, HOOK_NOTE } from "./v4.js?v=1";
@@ -2406,6 +2408,10 @@ async function ejecutarPlan() {
   btn.disabled = true;
   try {
     leerPlan();
+    /* Una imagen o un enlace que no caben se dicen aqui, antes de pedir nada (ver
+       problemaDeIdentidad en plan.js): recortarlos en silencio ya costo una foto. */
+    const tamaño = problemaDeIdentidad(PLAN);
+    if (tamaño) throw new Error(tamaño + " Nothing was signed.");
     /* LOS DECIMALES, DERIVADOS UNA VEZ Y USADOS EN TODAS PARTES.
      *
      * PLAN.decimals lo escribe la lectura de un token existente y nada lo
@@ -3193,7 +3199,7 @@ function tarjetaMuroV4(t, info, fab, locker, refrescar) {
   const caja = document.createElement("div"); caja.className = "log"; caja.hidden = true;
   const log = logger(caja);
   el.append(head, estado, fees, acc, caja);
-  const boton = (txt, fn, cls) => {
+  const boton = (txt, fn, cls, donde = acc) => {
     const b = document.createElement("button"); b.className = "btn btn-sm " + (cls || ""); b.textContent = txt;
     b.addEventListener("click", async () => {
       if (!signer) await connect();
@@ -3201,7 +3207,7 @@ function tarjetaMuroV4(t, info, fab, locker, refrescar) {
       b.disabled = true;
       try { await fn(); } catch (e) { log((motivoV4(e) || readableError(e)), "err"); } finally { b.disabled = false; }
     });
-    acc.append(b); return b;
+    donde.append(b); return b;
   };
   const cantidad = (v, dec) => Number(ethers.formatUnits(v, dec)).toLocaleString("es", { maximumFractionDigits: dec === 6 ? 4 : 0 });
 
@@ -3255,6 +3261,11 @@ function tarjetaMuroV4(t, info, fab, locker, refrescar) {
   estado.textContent = "reading who holds the wall…";
   callRead(V4_ARC.positionManager, POSM_ABI, "ownerOf", [tokenId]).then(([dueño]) => {
     const mio = account && String(dueño).toLowerCase() === account.toLowerCase();
+    if (String(dueño).toLowerCase() === ARC.deadAddress.toLowerCase()) {
+      estado.textContent = "BURNED — the wall is at the dead address " + dueño +
+        ". Nobody can take this liquidity out, and nobody collects its fees any more.";
+      return;
+    }
     estado.textContent = "NOT locked — the wall is in " + (mio ? "this wallet" : dueño) +
       ". Locking it sends it to the LaunchLocker for good; the fees stay yours.";
     if (!mio) return;
@@ -3275,19 +3286,104 @@ function tarjetaMuroV4(t, info, fab, locker, refrescar) {
     }, "btn-primary");
     boton("Collect fees", async () => {
       /* DECREASE_LIQUIDITY de CERO + TAKE_PAIR: solo se mueven las comisiones */
-      const abi = ethers.AbiCoder.defaultAbiCoder();
-      const datos = abi.encode(["bytes", "bytes[]"], ["0x0111", [
-        abi.encode(["uint256", "uint256", "uint128", "uint128", "bytes"], [tokenId, 0n, 0n, 0n, "0x"]),
-        abi.encode(["address", "address", "address"], [USDC_ERC20, t.address, account]),
-      ]]);
+      const datos = datosCobrarV4(tokenId, t.address, account);
       const posm = new ethers.Contract(V4_ARC.positionManager, POSM_ABI, signer);
       const tx = await posm.modifyLiquidities(datos, Math.floor(Date.now() / 1000) + 1800);
       log("sent: " + tx.hash, "ok");
       await esperarMinada(tx, log);
       log("fees collected to this wallet", "ok");
     });
+
+    /* AÑADIR, RETIRAR Y QUEMAR  (18-sep, el dueño: "falta el boton quemar y el boton
+       retirar y/o añadir"). Lo mismo que las tarjetas de V3, en V4. Solo con el muro SIN
+       bloquear y en esta cartera: uno bloqueado no tiene nada de esto, a proposito. */
+    const fila = document.createElement("div"); fila.className = "pos-lock";
+    const campo = (et) => {
+      const l = document.createElement("label"); l.className = "field";
+      const s = document.createElement("span"); s.textContent = et;
+      const i = document.createElement("input"); i.type = "text"; i.inputMode = "decimal"; i.placeholder = "0";
+      l.append(s, i); fila.append(l); return i;
+    };
+    const cTok = campo(sym + " to add");
+    const cUsd = campo("USDC to add");
+    boton("Add", () => añadirAlMuroV4(tokenId, t.address, sym, cTok.value, cUsd.value, log, refrescar), "btn-primary", fila);
+    el.insertBefore(fila, caja);
+    const bMas = document.createElement("button"); bMas.className = "btn btn-sm"; bMas.textContent = "Add more";
+    bMas.addEventListener("click", () => fila.classList.toggle("is-open"));
+    acc.append(bMas);
+
+    boton("Withdraw everything", async () => {
+      if (!confirm("Take ALL the liquidity out of wall #" + tokenId + " of " + sym + "?\n\nIt pulls out your tokens AND the USDC " +
+                   "buyers put in. That USDC is what lets them sell back, so taking it is the same act as removing the exit.\n\n" +
+                   "After this the wall can no longer be locked: only a whole wall can.")) return;
+      const [L] = await callRead(V4_ARC.positionManager, POSM_ABI, "getPositionLiquidity", [tokenId]);
+      if (BigInt(L) === 0n) { log("the wall is already empty", "ok"); return; }
+      const datos = datosRetirarV4(tokenId, BigInt(L), t.address, account);
+      const tx = await new ethers.Contract(V4_ARC.positionManager, POSM_ABI, signer).modifyLiquidities(datos, Math.floor(Date.now() / 1000) + 1800);
+      log("sent: " + tx.hash, "ok");
+      await esperarMinada(tx, log);
+      log("withdrawn: the tokens and the USDC are in this wallet", "ok");
+      refrescar();
+    });
+
+    boton("Burn permanently", async () => {
+      if (!confirm("Send wall #" + tokenId + " of " + sym + " to the dead address?\n\nThe liquidity stays in the pool for good, " +
+                   "and so do its fees: nobody collects them ever again, you included. To keep the fees, use Lock for good " +
+                   "instead — the liquidity is just as stuck.\n\nThis cannot be undone.")) return;
+      const posm = new ethers.Contract(V4_ARC.positionManager, ["function transferFrom(address,address,uint256)"], signer);
+      log("sending wall #" + tokenId + " to " + ARC.deadAddress + "…");
+      const tx = await posm.transferFrom(account, ARC.deadAddress, tokenId);
+      log("sent: " + tx.hash, "ok");
+      await esperarMinada(tx, log);
+      log("burned permanently", "ok");
+      refrescar();
+    }, "btn-danger");
   }).catch(() => { estado.textContent = "NOT locked — could not read who holds wall #" + tokenId; });
   return el;
+}
+
+/* AÑADIR AL MURO V4 (sin bloquear): INCREASE_LIQUIDITY sobre el MISMO NFT. La
+ * liquidez sale de las cantidades y del precio de ahora (con un 0,1 % menos, porque
+ * la cuenta es en coma flotante y las cantidades tecleadas son el techo). Si el
+ * precio esta por debajo del muro solo entra el token; dentro, los dos. Las
+ * comisiones acumuladas se descuentan de lo que se paga (V4 las abona al aumentar),
+ * por eso cada moneda se cierra con CLOSE_CURRENCY: paga si se debe, cobra si sobra. */
+async function añadirAlMuroV4(tokenId, token, sym, tokTxt, usdTxt, log, refrescar) {
+  const num = (x) => String(x || "").trim().replace(",", ".");
+  const aTok = num(tokTxt) ? ethers.parseUnits(num(tokTxt), 18) : 0n;
+  const aUsd = num(usdTxt) ? ethers.parseUnits(num(usdTxt), 6) : 0n;
+  if (!aTok && !aUsd) throw new Error("enter how much " + sym + " and/or USDC to add");
+  /* El saldo, antes: con menos de lo tecleado el PositionManager revierte con un
+     "TRANSFER_FROM_FAILED" que no dice nada (visto en la prueba del 18-sep). */
+  for (const [dir, cant, dec, nombre] of [[token, aTok, 18, sym], [USDC_ERC20, aUsd, 6, "USDC"]]) {
+    if (cant === 0n) continue;
+    const [bal] = await callRead(dir, ERC20_ABI, "balanceOf", [account]);
+    if (BigInt(bal) < cant) {
+      throw new Error("this wallet holds " + ethers.formatUnits(bal, dec) + " " + nombre + ", less than the " +
+                      ethers.formatUnits(cant, dec) + " typed — nothing was signed");
+    }
+  }
+  const [key, info] = await callRead(V4_ARC.positionManager, POSM_ABI, "getPoolAndPositionInfo", [tokenId]);
+  const { lower, upper } = rangoDeInfo(info);
+  const k = { currency0: String(key[0]), currency1: String(key[1]), fee: Number(key[2]), tickSpacing: Number(key[3]), hooks: String(key[4]) };
+  const [sqrtP, tick] = await callRead(V4.stateView, STATEVIEW_ABI, "getSlot0", [poolId(k)]);
+  let L = liquidityFor(Number(sqrtP), lower, upper, aUsd, aTok);
+  L = (L * 999n) / 1000n;
+  if (L === 0n) {
+    throw new Error(Number(tick) >= upper
+      ? "the price is above this wall, so it only takes " + sym + " — enter an amount of " + sym
+      : Number(tick) < lower ? "the price is below this wall, so it only takes USDC — enter an amount of USDC"
+        : "the price is inside this wall, so it takes both " + sym + " and USDC — enter both");
+  }
+  if (aUsd > 0n) await permit2Steps(ethers, signer, k.currency0, aUsd, log);
+  if (aTok > 0n) await permit2Steps(ethers, signer, k.currency1, aTok, log);
+  const datos = datosAñadirV4(tokenId, L, aUsd, aTok, k.currency1);
+  log("adding to wall #" + tokenId + " — same range, same NFT");
+  const tx = await new ethers.Contract(V4_ARC.positionManager, POSM_ABI, signer).modifyLiquidities(datos, Math.floor(Date.now() / 1000) + 1800);
+  log("sent: " + tx.hash, "ok");
+  await esperarMinada(tx, log);
+  log("added", "ok");
+  refrescar();
 }
 
 /* ── 6b · lo que lanzaste ──────────────────────────────────────────────── */

@@ -467,10 +467,10 @@
           <label class="field"><span>Symbol</span><input id="pSym" type="text" value="MTK" maxlength="16"></label>
         </div>
         <div class="grid2">
-          <label class="field"><span>Image URL</span><input id="pImage" type="text" maxlength="2048" placeholder="https://… or ipfs://…"><small>A GIF works. It is a link in your contract — nothing is uploaded here.</small></label>
-          <label class="field"><span>Website</span><input id="pWeb" type="text" maxlength="512" placeholder="https://…"></label>
-          <label class="field"><span>X / Twitter</span><input id="pTw" type="text" maxlength="512" placeholder="https://x.com/…"></label>
-          <label class="field"><span>Telegram</span><input id="pTg" type="text" maxlength="512" placeholder="https://t.me/…"></label>
+          <label class="field"><span>Image URL</span><input id="pImage" type="text" placeholder="https://… or ipfs://…"><small>A GIF works. It is a link in your contract — nothing is uploaded here. A pasted <code>data:</code> image is stored in the contract twice: up to 8,000 characters (about 6 KB).</small></label>
+          <label class="field"><span>Website</span><input id="pWeb" type="text" placeholder="https://…"></label>
+          <label class="field"><span>X / Twitter</span><input id="pTw" type="text" placeholder="https://x.com/…"></label>
+          <label class="field"><span>Telegram</span><input id="pTg" type="text" placeholder="https://t.me/…"></label>
         </div>
         <label class="field"><span>Description</span><input id="pDesc" type="text" maxlength="300" placeholder="One sentence."></label>
         <label class="radio">
@@ -853,6 +853,6 @@
 
 
 
-<script type="module" src="app.js?v=60"></script>
+<script type="module" src="app.js?v=61"></script>
 </body>
 </html>

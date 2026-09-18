@@ -129,6 +129,39 @@ export function paramsV4({ editable, argsToken, salt, lpFee, ticks, wallTokens, 
   };
 }
 
+/* ── lo que se hace con un muro SIN bloquear (el PositionManager de V4) ──────
+ * Cada una devuelve el `unlockData` de modifyLiquidities(unlockData, deadline).
+ * Codigos de acciones de v4-periphery (Actions.sol, commit fijado 07336f21):
+ *   00 INCREASE_LIQUIDITY  01 DECREASE_LIQUIDITY  12 CLOSE_CURRENCY  11 TAKE_PAIR */
+const abiC = () => ethers.AbiCoder.defaultAbiCoder();
+const decrease = (tokenId, liquidez) =>
+  abiC().encode(["uint256", "uint256", "uint128", "uint128", "bytes"], [tokenId, liquidez, 0n, 0n, "0x"]);
+/* Cobrar comisiones: quitar CERO liquidez y llevarse las dos monedas. */
+export function datosCobrarV4(tokenId, token, a) {
+  return abiC().encode(["bytes", "bytes[]"], ["0x0111", [decrease(tokenId, 0n),
+    abiC().encode(["address", "address", "address"], [USDC_ERC20, token, a])]]);
+}
+/* Retirar: quitar `liquidez` (toda, desde la pagina) y llevarse las dos monedas. */
+export function datosRetirarV4(tokenId, liquidez, token, a) {
+  return abiC().encode(["bytes", "bytes[]"], ["0x0111", [decrease(tokenId, liquidez),
+    abiC().encode(["address", "address", "address"], [USDC_ERC20, token, a])]]);
+}
+/* Añadir al mismo NFT. Las comisiones acumuladas se abonan al aumentar, asi que cada
+   moneda se cierra con CLOSE_CURRENCY: paga lo que se deba o cobra lo que sobre. */
+export function datosAñadirV4(tokenId, liquidez, maxUsdc, maxToken, token) {
+  return abiC().encode(["bytes", "bytes[]"], ["0x001212", [
+    abiC().encode(["uint256", "uint256", "uint128", "uint128", "bytes"], [tokenId, liquidez, maxUsdc, maxToken, "0x"]),
+    abiC().encode(["address"], [USDC_ERC20]),
+    abiC().encode(["address"], [token]),
+  ]]);
+}
+/* El rango del NFT, del PositionInfo empaquetado:
+   | 200 bits poolId | 24 bits tickUpper | 24 bits tickLower | 8 bits hasSubscriber | */
+export function rangoDeInfo(info) {
+  const s24 = (x) => { const v = Number(x & 0xFFFFFFn); return v >= 0x800000 ? v - 0x1000000 : v; };
+  return { lower: s24(BigInt(info) >> 8n), upper: s24(BigInt(info) >> 32n) };
+}
+
 /* Una sal al azar para empezar; findSalt() (una eth_call) da la primera derivada
    cuyo token queda por encima de la USDC y sigue libre. */
 export function salBase() {

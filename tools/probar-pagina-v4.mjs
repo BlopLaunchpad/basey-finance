@@ -204,4 +204,14 @@ await caso("motivoV4() pone en palabras un revert de la fabrica", async () => {
   assert.throws(() => F4.ticksV4(P0, 1.02, 1.01), /wall/);
 });
 
+await caso("la identidad que no cabe se DICE (problemaDeIdentidad), no se recorta", async () => {
+  const base = { ...PLANMOD.planPorDefecto(), imagen: "data:image/webp;base64," + "A".repeat(2600) };
+  assert.equal(PLANMOD.problemaDeIdentidad(base), null, "una imagen de 2.600 caracteres cabe");
+  const grande = { ...base, imagen: "data:image/png;base64," + "A".repeat(PLANMOD.MAX_IMAGEN) };
+  assert.match(PLANMOD.problemaDeIdentidad(grande), /limit is 8,000/);
+  assert.ok(PLANMOD.avisosDe(grande).some((x) => /Nothing will be signed/.test(x)), "sale en los avisos");
+  assert.equal(PLANMOD.problemaDeIdentidad({ ...grande, modo: "existente" }), null, "con un token que ya existe no aplica");
+  assert.match(PLANMOD.problemaDeIdentidad({ ...base, web: "https://" + "x".repeat(600) }), /website/);
+});
+
 console.log("\n" + bien + " casos, todos bien | peticiones al nodo: " + peticiones + " | nada enviado a la cadena");

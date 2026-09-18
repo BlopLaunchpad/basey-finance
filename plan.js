@@ -144,6 +144,29 @@ export function quemaDe(plan) {
   return 0;
 }
 
+/* EL TAMAÑO DE LA IDENTIDAD, DICHO Y NO RECORTADO.  (18-sep-2026)
+ * La imagen va DOS veces en el contrato (en el JSON y en logo()), y cada byte es gas
+ * al desplegar: medido en la revision, 12 KB + 12 KB son 19,3 M de gas y 20 + 20 ya no
+ * caben en un bloque. Hubo un maxlength="2048" en el campo, y un maxlength RECORTA EN
+ * SILENCIO lo que se pega: el primer token en V4 del dueño salio con su imagen data:
+ * cortada, y GMGN leyo las redes pero no pudo pintar la foto. Ahora no se recorta nada:
+ * se dice que sobra y el lanzamiento no se firma. */
+export const MAX_IMAGEN = 8000;
+export const MAX_ENLACE = 512;
+export function problemaDeIdentidad(plan) {
+  if (plan.modo === "existente") return null;
+  const img = String(plan.imagen || "");
+  if (img.length > MAX_IMAGEN) {
+    return "The picture is " + img.length.toLocaleString("en") + " characters and the limit is " +
+      MAX_IMAGEN.toLocaleString("en") + ": it goes into the contract twice and would make the launch too big to fit in a block. " +
+      "Use a smaller image, or a link (IPFS or https) instead of a pasted data: image.";
+  }
+  for (const [nombre, v] of [["website", plan.web], ["X / Twitter", plan.twitter], ["Telegram", plan.telegram]]) {
+    if (String(v || "").length > MAX_ENLACE) return "The " + nombre + " link is longer than " + MAX_ENLACE + " characters.";
+  }
+  return null;
+}
+
 /* V4 con la fabrica: solo para un token que se despliega aqui. */
 export function usaV4(plan) {
   return plan.pool === "v4" && plan.modo !== "existente";
@@ -191,6 +214,8 @@ export function resumen(plan) {
  * avisos, igual que en el resto de la pagina. */
 export function avisosDe(plan) {
   const out = [];
+  const tamaño = problemaDeIdentidad(plan);
+  if (tamaño) out.push(tamaño + " Nothing will be signed until it fits.");
   const r = repartido(plan);
   if (r === 0) out.push("The treasury takes the whole supply, so the wall holds nothing and the pool opens with nothing to sell.");
   const t = plan.tramos[0];
