@@ -24,7 +24,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
-const { ethers } = require(path.join(raiz, "..", "blop-contracts", "node_modules", "ethers"));
+const { ethers } = require("ethers");
 const { COMPRA_ATOMICA_SOURCE } = await import(pathToFileURL(path.join(raiz, "compra-atomica.js")).href);
 
 const CADENA = 5042;

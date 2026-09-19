@@ -9,3 +9,5 @@ BASEY.md
 contratos-v4/.deps/
 # lo que compila tools/compilar-v4.mjs: se regenera, y la pagina usa fabrica-v4-codigo.js
 contratos-v4/out/
+# copias de seguridad antes de tocar algo: nunca se suben
+*.antes-*

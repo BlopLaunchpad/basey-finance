@@ -18,8 +18,7 @@
    contratos) es falso: nada toca la red, nada se firma, y las direcciones son
    inventadas. Lo que se mira es QUE moneda opera cada cartera y que dice el log.
 
-   ethers: ETHERS_PATH, "ethers", o el node_modules de cusp-web, blopfun-web o
-   blop-indexer al lado de este repo. Sin rutas de disco escritas. */
+   ethers: el de este repo (npm i), o ETHERS_PATH. Sin rutas de disco escritas. */
 import { createRequire } from "node:module";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -30,10 +29,7 @@ const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 
 function cargarEthers() {
-  const sitios = [process.env.ETHERS_PATH, "ethers",
-    path.join(raiz, "..", "cusp-web", "node_modules", "ethers"),
-    path.join(raiz, "..", "blopfun-web", "node_modules", "ethers"),
-    path.join(raiz, "..", "blop-indexer", "node_modules", "ethers")].filter(Boolean);
+  const sitios = [process.env.ETHERS_PATH, "ethers",].filter(Boolean);
   for (const s of sitios) { try { return require(s); } catch { /* el siguiente */ } }
   throw new Error("ethers not found — set ETHERS_PATH to a node_modules/ethers folder");
 }

@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
-const { ethers } = require(path.join(raiz, "..", "blop-contracts", "node_modules", "ethers"));
+const { ethers } = require("ethers");
 const imp = (f) => import(pathToFileURL(path.join(raiz, f)).href);
 const { crearProveedorRotativo, NODOS_ARC } = await imp("rpc.js");
 const { BASEY_TOKEN_SOURCE, argsDelToken } = await imp("basey-token.js");

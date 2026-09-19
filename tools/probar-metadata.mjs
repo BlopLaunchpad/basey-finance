@@ -30,10 +30,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 function cargarEthers() {
-  const sitios = [process.env.ETHERS_PATH, "ethers",
-    path.join(raiz, "..", "blop-contracts", "node_modules", "ethers"),
-    path.join(raiz, "..", "cusp-web", "node_modules", "ethers"),
-    path.join(raiz, "..", "blop-indexer", "node_modules", "ethers")].filter(Boolean);
+  const sitios = [process.env.ETHERS_PATH, "ethers",].filter(Boolean);
   for (const s of sitios) { try { return require(s); } catch { /* el siguiente */ } }
   throw new Error("ethers not found — set ETHERS_PATH");
 }

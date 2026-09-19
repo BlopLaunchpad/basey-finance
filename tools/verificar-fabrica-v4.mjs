@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
-const { ethers } = require(path.join(raiz, "..", "blop-contracts", "node_modules", "ethers"));
+const { ethers } = require("ethers");
 const { entradaEstandar, compilar, VERSION_SOLC } = await import(pathToFileURL(path.join(raiz, "tools", "compilar-v4.mjs")).href);
 const COD = await import(pathToFileURL(path.join(raiz, "fabrica-v4-codigo.js")).href);
 

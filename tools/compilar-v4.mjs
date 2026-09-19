@@ -156,7 +156,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const { pathToFileURL } = await import("node:url");
   const { BASEY_TOKEN_SOURCE } = await import(pathToFileURL(path.join(raiz, "basey-token.js")).href);
   const { createRequire } = await import("node:module");
-  const { ethers } = createRequire(import.meta.url)(path.join(raiz, "..", "blop-contracts", "node_modules", "ethers"));
+  const { ethers } = createRequire(import.meta.url)("ethers");
   const TK = compilarToken(BASEY_TOKEN_SOURCE);
   const codTok = "0x" + TK.BaseyToken.evm.bytecode.object;
   const codEd = "0x" + TK.BaseyTokenEditable.evm.bytecode.object;

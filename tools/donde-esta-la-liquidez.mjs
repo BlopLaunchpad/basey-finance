@@ -6,7 +6,7 @@
    acuño la fabrica directamente en la pool, sin NFT). */
 const RPC = "https://brc.exchange/api/rpc";   // acepta getLogs filtrado de 50.000 bloques (medido 17-sep)
 const RPC2 = "https://rpc.mainnet.arc.io";
-const { ethers } = await import("file:///C:/Users/ruben/blop-contracts/node_modules/ethers/lib.esm/index.js");
+const { ethers } = await import("ethers");
 const p = new ethers.JsonRpcProvider(RPC2, 5042, { staticNetwork: true });
 const DEAD = "0x000000000000000000000000000000000000dead";
 const NFPM_V3 = "0x39654A85A4C05127f5Fd6ED22CAeC077A0fB1377";

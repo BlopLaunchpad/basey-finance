@@ -1,0 +1,8 @@
+{
+  "name": "basey-finance",
+  "private": true,
+  "description": "basey.finance se sirve tal cual (HTML/JS sin construir). Esto existe SOLO para que las herramientas de tools/ tengan su propio ethers, sin depender de otros repos. NO pongas type:module: rutas.js es una copia byte a byte del enrutador y se carga con require() desde tools/probar-motor.mjs; con type:module dejaria de cargarse. El aviso MODULE_TYPELESS_PACKAGE_JSON al importar un .js ESM es el precio de eso, y es solo ruido.",
+  "dependencies": {
+    "ethers": "6.17.0"
+  }
+}

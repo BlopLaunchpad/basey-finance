@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
-const { ethers } = require(path.join(raiz, "..", "blop-contracts", "node_modules", "ethers"));
+const { ethers } = require("ethers");
 const { BASEY_TOKEN_SOURCE } = await import(pathToFileURL(path.join(raiz, "basey-token.js")).href);
 const NODO = process.env.NODO || "https://rpc.mainnet.arc.io";
 const SOLC = path.join(process.env.APPDATA || "", "svm", "0.8.24", "solc-0.8.24");

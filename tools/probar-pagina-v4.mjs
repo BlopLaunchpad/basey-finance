@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
-const { ethers } = require(path.join(raiz, "..", "blop-contracts", "node_modules", "ethers"));
+const { ethers } = require("ethers");
 globalThis.ethers = ethers;   // la pagina lo tiene como global
 const imp = (f) => import(pathToFileURL(path.join(raiz, f)).href);
 const { entradaEstandar, compilar, compilarToken } = await imp("tools/compilar-v4.mjs");

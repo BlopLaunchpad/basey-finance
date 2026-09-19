@@ -20,8 +20,8 @@
    ninguna clave produjo: ethers la puede leer y sacarle hash, remitente y
    nonce, y nada más. fetch es falso de principio a fin.
 
-   ethers: ETHERS_PATH, "ethers", o el node_modules de cusp-web o blopfun-web al
-   lado de este repo. Sin rutas de disco escritas: el repo es público y GitHub
+   ethers: el de este repo (npm i), o ETHERS_PATH.
+   Sin rutas de disco escritas: el repo es público y GitHub
    Pages sirve este fichero. OJO: la página carga ethers 6.13.2 del CDN y aquí
    se prueba con el que haya; la prueba de navegador cubre la 6.13.2.
 
@@ -44,9 +44,7 @@ const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 
 function cargarEthers() {
-  const sitios = [process.env.ETHERS_PATH, "ethers",
-    path.join(raiz, "..", "cusp-web", "node_modules", "ethers"),
-    path.join(raiz, "..", "blopfun-web", "node_modules", "ethers")].filter(Boolean);
+  const sitios = [process.env.ETHERS_PATH, "ethers"].filter(Boolean);
   for (const s of sitios) { try { return require(s); } catch { /* el siguiente */ } }
   throw new Error("ethers not found — set ETHERS_PATH to a node_modules/ethers folder");
 }
