@@ -106,7 +106,7 @@ await caso("2. un envio aceptado sale con los MISMOS bytes hacia cada otro nodo,
 await caso("3. lo que contesten los repartos (429, nonce too low, red caida) no cambia nada ni castiga", async () => {
   conducta[DRPC] = conEnvio(L429);
   conducta["https://rpc.arc-scan.org"] = conEnvio(NONCE_BAJO);
-  conducta["https://thecusp.io/api/arc-rpc"] = conEnvio(CORTA);
+  conducta["https://niorfun.com/api/rpc"] = conEnvio(CORTA);
   const p = nuevo();
   await p.getBlockNumber();
   const h = await p.send("eth_sendRawTransaction", [BLOB]);

@@ -122,7 +122,7 @@ export const NODOS_ARC = [
   "https://rpc.mainnet.arc.io",
   "https://arc.drpc.org",
   "https://rpc.arc-scan.org",
-  "https://thecusp.io/api/arc-rpc",
+  /* thecusp.io/api/arc-rpc SALE el 19-sep-2026: Cusp se cierra y su proxy se apaga. */
   "https://niorfun.com/api/rpc",
 ];
 
