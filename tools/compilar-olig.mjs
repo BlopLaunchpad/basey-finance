@@ -13,7 +13,7 @@ const bytecode = art.bytecode && art.bytecode.object;
 if (!/^0x[0-9a-f]+$/i.test(bytecode || "") || bytecode.length < 2000) throw new Error("sin bytecode: haz forge build en contratos-olig");
 const solc = art.metadata && art.metadata.compiler && art.metadata.compiler.version;
 const md5 = crypto.createHash("md5").update(bytecode).digest("hex");
-const abi = art.abi.filter((x) => x.type === "function" && ["name", "symbol", "decimals", "totalSupply", "balanceOf", "INITIAL_SUPPLY"].includes(x.name));
+const abi = art.abi.filter((x) => x.type === "function" && ["name", "symbol", "decimals", "totalSupply", "balanceOf", "INITIAL_SUPPLY", "owner", "tokenURI", "logo", "description"].includes(x.name));
 const salida = `/* GENERADO por tools/compilar-olig.mjs el ${new Date().toISOString()} — no se edita a mano.
    Oligarc ($OLIG): contratos-olig/src/Oligarc.sol, solc ${solc}, evm cancun, optimizador 200. md5 del bytecode: ${md5} */
 export const OLIG_BYTECODE = "${bytecode}";

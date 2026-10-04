@@ -79,13 +79,33 @@ contract OligarcTest is Test {
         assertEq(token.balanceOf(alice), 20 ether);
     }
 
-    // sin dueño ni acuñacion: ninguna de esas funciones existe en el contrato
+    // sin dueño ni acuñacion: ninguna de esas funciones existe en el contrato (owner() SI existe, y contesta cero)
     function testNoAdminSelectors() public {
-        bytes4[6] memory sels = [bytes4(keccak256("mint(address,uint256)")), bytes4(keccak256("owner()")), bytes4(keccak256("pause()")),
+        bytes4[6] memory sels = [bytes4(keccak256("mint(address,uint256)")), bytes4(keccak256("renounceOwnership()")), bytes4(keccak256("pause()")),
             bytes4(keccak256("transferOwnership(address)")), bytes4(keccak256("blacklist(address)")), bytes4(keccak256("setFee(uint256)"))];
         for (uint256 i = 0; i < sels.length; i++) {
             (bool ok,) = address(token).call(abi.encodeWithSelector(sels[i], alice, 1));
             assertFalse(ok);
         }
+    }
+
+    // 4-oct (tarde): lo que leen GMGN y compañia, con la forma del token de basey que salio con imagen y redes
+    function testOwnerIsZero() public view {
+        assertEq(token.owner(), address(0));
+    }
+
+    function testTrackerGetters() public view {
+        assertTrue(_empieza(token.tokenURI(), "data:application/json;base64,eyJuYW1lIjoiT2xpZ2FyYyIsInN5bWJvbCI6Ik9MSUci"));
+        assertTrue(_empieza(token.logo(), "data:image/webp;base64,UklGR"));
+        assertEq(token.description(), "The OligArc token. Every whale. Every position. Live.");
+        assertGt(bytes(token.logo()).length, 1000);
+    }
+
+    function _empieza(string memory s, string memory p) internal pure returns (bool) {
+        bytes memory a = bytes(s);
+        bytes memory b = bytes(p);
+        if (a.length < b.length) return false;
+        for (uint256 i = 0; i < b.length; i++) if (a[i] != b[i]) return false;
+        return true;
     }
 }

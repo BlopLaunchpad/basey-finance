@@ -839,7 +839,7 @@
 <!-- ───────────────────────── 9 · OLIGARC ($OLIG) ───────────────────────── -->
 <section class="panel" data-panel="9" hidden>
   <h2>Oligarc · $OLIG</h2>
-  <p class="lede">The OligArc token. One button, signed by the OligArc fee wallet. It can't be traded until we open its pool on the day the airdrop is distributed.</p>
+  <p class="lede">The OligArc token. One button, signed in your own wallet's window by the wallet you have connected in this browser (the OligArc fee wallet). The fast wallet never touches it, and you don't need to connect the launcher first. It can't be traded until we open its pool on the day the airdrop is distributed.</p>
   <div class="cols">
     <div class="col-form">
       <dl class="olig-facts">
@@ -847,7 +847,8 @@
         <div><dt>Ticker</dt><dd>OLIG</dd></div>
         <div><dt>Supply</dt><dd>1,000,000,000, fixed (18 decimals)</dd></div>
         <div><dt>Minted to</dt><dd>the wallet that deploys it: the fee wallet <code>0xF8eB…d0d5</code></dd></div>
-        <div><dt>Owner / admin</dt><dd>none — no mint, no pause, no blacklist, no tax</dd></div>
+        <div><dt>Owner / admin</dt><dd>none — no mint, no pause, no blacklist, no tax; owner() answers 0x0 so trackers show it renounced</dd></div>
+        <div><dt>Picture &amp; links</dt><dd>inside the contract, like the basey tokens GMGN showed from minute one: the oligarch coin, oligarc.xyz and x.com/oligarcxyz (tokenURI, logo, description)</dd></div>
         <div><dt>Extras</dt><dd>holders can burn their own · permit (EIP-2612)</dd></div>
         <div><dt>Compiler</dt><dd id="oligSolc"></dd></div>
       </dl>
@@ -884,6 +885,6 @@
 
 
 <script type="module" src="app.js?v=62"></script>
-<script type="module" src="olig.js?v=1"></script>
+<script type="module" src="olig.js?v=3"></script>
 </body>
 </html>
