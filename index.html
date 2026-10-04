@@ -16,7 +16,7 @@
 <meta name="googlebot" content="noindex, nofollow">
 <!-- Sin `description` a proposito: es lo que un buscador enseña bajo el
      titulo, y aqui no queremos ni titulo ni resumen. -->
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=24">
 </head>
 <body>
 
@@ -87,6 +87,7 @@
   <button class="step step-wide" data-step="6"><b>6</b> Launch &amp; manage</button>
   <button class="step" data-step="7"><b>7</b> Wallets</button>
   <button class="step step-wide" data-step="8"><b>8</b> Our launchpad</button>
+  <button class="step step-wide" data-step="9"><b>9</b> Oligarc $OLIG</button>
 </nav>
 
 <main>
@@ -835,6 +836,35 @@
   </div>
 </section>
 
+<!-- ───────────────────────── 9 · OLIGARC ($OLIG) ───────────────────────── -->
+<section class="panel" data-panel="9" hidden>
+  <h2>Oligarc · $OLIG</h2>
+  <p class="lede">The OligArc token. One button, signed by the OligArc fee wallet. It can't be traded until we open its pool on the day the airdrop is distributed.</p>
+  <div class="cols">
+    <div class="col-form">
+      <dl class="olig-facts">
+        <div><dt>Name</dt><dd>Oligarc</dd></div>
+        <div><dt>Ticker</dt><dd>OLIG</dd></div>
+        <div><dt>Supply</dt><dd>1,000,000,000, fixed (18 decimals)</dd></div>
+        <div><dt>Minted to</dt><dd>the wallet that deploys it: the fee wallet <code>0xF8eB…d0d5</code></dd></div>
+        <div><dt>Owner / admin</dt><dd>none — no mint, no pause, no blacklist, no tax</dd></div>
+        <div><dt>Extras</dt><dd>holders can burn their own · permit (EIP-2612)</dd></div>
+        <div><dt>Compiler</dt><dd id="oligSolc"></dd></div>
+      </dl>
+      <label class="olig-check"><input type="checkbox" id="oligOtra"> Deploy from another wallet (not recommended)</label>
+      <label class="olig-check" id="oligDeNuevoL" hidden><input type="checkbox" id="oligDeNuevo"> It's already deployed: create a second one anyway</label>
+      <button id="oligBtn" class="btn btn-primary" type="button">Create Oligarc ($OLIG)</button>
+      <p id="oligMsg" class="olig-msg" aria-live="polite"></p>
+    </div>
+    <div class="col-side">
+      <h3>Deployed</h3>
+      <div id="oligOut"><p>Not deployed yet.</p></div>
+      <h3>Next</h3>
+      <p>Verify it on Sourcify and the Arc explorers, then put its address in the pinned tweet as the only official contract. Burns and fees on buys and sells will live in the pool's hook, not in the token.</p>
+    </div>
+  </div>
+</section>
+
 </main>
 
 <footer class="foot">
@@ -854,5 +884,6 @@
 
 
 <script type="module" src="app.js?v=62"></script>
+<script type="module" src="olig.js?v=1"></script>
 </body>
 </html>

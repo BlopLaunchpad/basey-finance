@@ -11,3 +11,7 @@ contratos-v4/.deps/
 contratos-v4/out/
 # copias de seguridad antes de tocar algo: nunca se suben
 *.antes-*
+# el token Oligarc: las copias de OpenZeppelin/forge-std y lo compilado no se sirven (4-oct)
+contratos-olig/lib/
+contratos-olig/out/
+contratos-olig/cache/

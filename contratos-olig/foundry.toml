@@ -1,0 +1,17 @@
+# EL TOKEN OLIGARC ($OLIG), 4-oct-2026.
+# Compilador: 0.8.37, la estable mas nueva instalada (svm), fijada exacta en el pragma para que la verificacion en
+# Sourcify y en los exploradores de Arc reproduzca el mismo bytecode. EVM cancun: la que ya corre Arc (Uniswap V4 usa
+# almacenamiento transitorio y funciona en la cadena 5042). Optimizador a 200 como el resto de contratos del launcher.
+# OpenZeppelin 5.7.0 (copia de cusp-web/lib), solo la carpeta contracts/.
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.37"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+bytecode_hash = "ipfs"
+cbor_metadata = true
+remappings = ["@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/", "forge-std/=lib/forge-std/src/"]
