@@ -4,7 +4,8 @@
    fijos, todos a quien lo despliega; sin dueño, sin acuñar, sin pausa, sin lista negra, sin comisiones; quemable y con
    permit) desde la wallet de las comisiones de OligArc. Firma SIEMPRE la wallet del dueño; esta pagina no guarda claves.
    - El bytecode es EXACTAMENTE el que compilo y probo forge (olig-codigo.js, generado por tools/compilar-olig.mjs).
-   - Antes de pedir la firma: red Arc (5042), la cuenta es la de las comisiones (o casilla explicita), y una estimacion de
+   - Antes de pedir la firma: red Arc (5042), la cuenta NO es la de las comisiones (5-oct: el dueño lo crea desde una wallet
+     nueva solo para el token y la guarda hasta el airdrop; la de comisiones solo con casilla explicita), y una estimacion de
      gas en la cadena (si el despliegue fuese a fallar, falla aqui y no se firma nada).
    - Contra el doble despliegue: el hash se guarda en cuanto se envia (basey.olig); si ya hay uno, el boton exige marcar
      "desplegar otro"; si la respuesta se perdio, al abrir la pestaña se busca el recibo y se recupera la direccion.
@@ -54,7 +55,8 @@ async function pintar() {
   let datos = "";
   try {
     const c = new window.ethers.Contract(g.address, OLIG_ABI, lector());
-    const [n, s, d, t, b] = await Promise.all([c.name(), c.symbol(), c.decimals(), c.totalSupply(), c.balanceOf(FEE_WALLET)]);
+    const quien = /^0x[0-9a-f]{40}$/.test(String(g.from || "")) ? g.from : FEE_WALLET; // la que lo desplego (5-oct: una wallet nueva solo para el token)
+    const [n, s, d, t, b] = await Promise.all([c.name(), c.symbol(), c.decimals(), c.totalSupply(), c.balanceOf(quien)]);
     // lo que leen GMGN y compañia (4-oct): el icono y los enlaces van dentro del contrato; owner() contesta cero
     let extra = "";
     try {
@@ -64,7 +66,7 @@ async function pintar() {
       extra = "<li>" + img + "Picture and links inside the contract: " + esc(j.website || "") + " · " + esc(j.twitter || "") + "</li><li>owner() = " + esc(own) + "</li>";
     } catch (e) { extra = "<li>This contract has no picture or links inside (an older build).</li>"; }
     const f = (x) => Number(window.ethers.formatUnits(x, d)).toLocaleString("en-US");
-    datos = "<li><b>" + esc(n) + "</b> · " + esc(s) + " · " + d + " decimals</li><li>Supply " + f(t) + "</li><li>Fee wallet holds " + f(b) + "</li>" + extra;
+    datos = "<li><b>" + esc(n) + "</b> · " + esc(s) + " · " + d + " decimals</li><li>Supply " + f(t) + "</li><li>" + esc(corto(quien)) + " (the wallet that created it) holds " + f(b) + "</li>" + extra;
   } catch (e) { datos = "<li>Couldn't read the contract right now.</li>"; }
   out.innerHTML = '<p class="olig-addr">Contract <code>' + esc(g.address) + "</code></p><ul>" + datos + "</ul>" +
     '<p><a href="' + ARC.explorer + "/address/" + esc(g.address) + '" target="_blank" rel="noopener">explorer.arc.io</a> · <a href="https://arc.etherscan.io/address/' + esc(g.address) + '" target="_blank" rel="noopener">arc.etherscan.io</a> · tx <a href="' + ARC.explorer + "/tx/" + esc(g.tx) + '" target="_blank" rel="noopener">' + esc(corto(g.tx)) + "</a></p>";
@@ -74,7 +76,7 @@ async function desplegar() {
   const btn = $("oligBtn");
   if (btn.disabled) return;
   const eth = window.ethereum;
-  if (!eth) { aviso("No browser wallet found. Open this page with the fee wallet's browser extension.", "err"); return; }
+  if (!eth) { aviso("No browser wallet found. Open this page in the browser (or the wallet app's browser) of the new wallet you made for $OLIG.", "err"); return; }
   const g = leer();
   if (g && (g.address || g.tx) && !$("oligDeNuevo").checked) { aviso("There is already a deployment from this browser (see on the right). Tick the box if you really want a second token.", "err"); return; }
   btn.disabled = true;
@@ -82,13 +84,14 @@ async function desplegar() {
     aviso("Connecting your wallet…");
     const [cuenta] = await eth.request({ method: "eth_requestAccounts" });
     const a = String(cuenta || "").toLowerCase();
-    if (a !== FEE_WALLET && !$("oligOtra").checked) throw new Error("This is " + corto(a) + ". Connect the fee wallet " + corto(FEE_WALLET) + " (it receives the 1,000,000,000 OLIG and the fees), or tick 'another wallet'.");
+    // 5-oct: se crea desde una wallet NUEVA solo para el token; la de comisiones (de uso diario) solo marcando la casilla
+    if (a === FEE_WALLET && !$("oligOtra").checked) throw new Error("This is the OligArc fee wallet (" + corto(FEE_WALLET) + "), which is used every day. Connect the new wallet you made just for $OLIG, or tick the box to use the fee wallet anyway.");
     await asegurarArc(eth);
     const prov = new window.ethers.BrowserProvider(eth);
     const firmante = await prov.getSigner();
     aviso("Checking the deployment on Arc (nothing is signed yet)…");
     const gas = await lector().estimateGas({ from: a, data: OLIG_BYTECODE });
-    aviso("Confirm the deployment in your wallet's own window, signed by " + corto(a) + " (≈ " + gas.toString() + " gas).");
+    aviso("Confirm the deployment in your wallet's own window. All 1,000,000,000 OLIG go to " + a + ", the wallet that signs (≈ " + gas.toString() + " gas).");
     const tx = await firmante.sendTransaction({ data: OLIG_BYTECODE, gasLimit: (gas * 12n) / 10n });
     guardar({ tx: tx.hash, from: a, at: Date.now() });
     aviso("Sent " + corto(tx.hash) + ". Waiting for Arc…");
