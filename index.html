@@ -852,14 +852,6 @@
         <div><dt>Extras</dt><dd>holders can burn their own · permit (EIP-2612)</dd></div>
         <div><dt>Compiler</dt><dd id="oligSolc"></dd></div>
       </dl>
-      <div class="olig-test">
-        <h3>Test first</h3>
-        <p>The same contract with the name TEST, a test picture and test links (example.com, x.com/x, t.me/telegram), to check on GMGN that the picture and links show before creating the real one. Any wallet can sign it.</p>
-        <button id="oligTestBtn" class="btn" type="button">Create a TEST token</button>
-        <p id="oligTestMsg" class="olig-msg" aria-live="polite"></p>
-        <div id="oligTestOut"></div>
-      </div>
-      <h3>The real one</h3>
       <label class="olig-check"><input type="checkbox" id="oligOtra"> Use the OligArc fee wallet anyway (not recommended)</label>
       <label class="olig-check" id="oligDeNuevoL" hidden><input type="checkbox" id="oligDeNuevo"> It's already deployed: create a second one anyway</label>
       <button id="oligBtn" class="btn btn-primary" type="button">Create Oligarc ($OLIG)</button>
@@ -871,14 +863,6 @@
       <h3>Next</h3>
       <p>Verify it on Sourcify and the Arc explorers, then put its address in the pinned tweet as the only official contract. Burns and fees on buys and sells will live in the pool's hook, not in the token.</p>
     </div>
-  </div>
-  <div class="olig-test olig-pool">
-    <h3>Uniswap V4 pool for a token you hold (for the TEST)</h3>
-    <p>Opens a USDC/token pool on Uniswap V4 at 1% (no hook, like the basey pools) at the market cap you choose, and puts all of the token this wallet holds in a sell wall from that price up to 1,000&times;. Nothing in the floor. Three signatures: approve Permit2, let the position manager use it, and one transaction that opens the pool and places the wall. The first buy goes after, from anywhere (GMGN works). Not for $OLIG: its pool opens on the day of the airdrop.</p>
-    <div class="olig-pool-row"><label>Token <input id="oligPoolToken" type="text" placeholder="0x…" spellcheck="false" autocomplete="off"></label><label>Opening market cap (USD) <input id="oligPoolMc" type="number" min="100" step="100" value="5000"></label></div>
-    <button id="oligPoolBtn" class="btn" type="button">Open the V4 pool and its wall</button>
-    <p id="oligPoolMsg" class="olig-msg" aria-live="polite"></p>
-    <div id="oligPoolOut"></div>
   </div>
 </section>
 
@@ -901,6 +885,6 @@
 
 
 <script type="module" src="app.js?v=62"></script>
-<script type="module" src="olig.js?v=6"></script>
+<script type="module" src="olig.js?v=7"></script>
 </body>
 </html>
