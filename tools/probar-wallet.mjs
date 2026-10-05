@@ -138,6 +138,17 @@ try {
   const ok1 = await texto(page, "wlRes");
   comprobar("frase PEGADA: la copia funciona", /backup works/.test(ok1), ok1);
   comprobar("y ahora si: la direccion es la del fichero y sale el paso 5", (await texto(page, "wlDir")) === w1.address && !(await oculto(page, "wlS5")));
+  // v4: la clave privada, solo si se pide (con confirmacion), y se vuelve a esconder
+  comprobar("la zona de la clave aparece, pero la clave NO esta en el DOM", !(await oculto(page, "wlClaveZona")) && !(await page.evaluate(() => document.documentElement.outerHTML.toLowerCase())).includes(pk));
+  page.once("dialog", (d) => d.dismiss());
+  await page.click("#wlVerClave");
+  comprobar("si se cancela la confirmacion, no se enseña", (await oculto(page, "wlClaveCaja")) && (await texto(page, "wlClaveTxt")) === "");
+  page.once("dialog", (d) => d.accept());
+  await page.click("#wlVerClave");
+  comprobar("aceptada: enseña la clave del fichero (la misma que abre ethers en Node)", (await texto(page, "wlClaveTxt")) === w1.privateKey && !(await oculto(page, "wlClaveCaja")));
+  await page.screenshot({ path: path.join(CAPTURAS, "wallet-pc-clave.png"), fullPage: true });
+  await page.click("#wlClaveOcultar");
+  comprobar("Hide: la clave sale del DOM", (await oculto(page, "wlClaveCaja")) && !(await page.evaluate(() => document.documentElement.outerHTML.toLowerCase())).includes(pk));
   await page.screenshot({ path: path.join(CAPTURAS, "wallet-pc-comprobada.png"), fullPage: true });
 
   const propias = new Set(["/wallet.html", "/style.css", "/wallet.css", "/ethers-6.17.0.umd.min.js", "/wallet.js", "/favicon.ico"]);
@@ -156,6 +167,7 @@ try {
   await page2.screenshot({ path: path.join(CAPTURAS, "wallet-movil-creada.png"), fullPage: true });
   await page.bringToFront(); // una pestaña de fondo se queda dormida en headless
   comprobar("el fichero de OTRA wallet: avisa de que es distinta", /DIFFERENT/.test(await comprobarFichero(page, f2, r2.frase)));
+  comprobar("y la zona de la clave se cierra", await oculto(page, "wlClaveZona"));
 
   // guardas: abierta por otra pagina del mismo sitio, y dentro de un marco
   const madre = await browser.newPage();

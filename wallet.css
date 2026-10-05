@@ -47,3 +47,8 @@
 .wl-pw input { flex: 1; min-width: 0; }
 .wl-pw input[type="text"] { font: 14px var(--mono); color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 .wl-fila { display: flex; gap: 8px; }
+
+/* la clave privada, solo si se pide en el paso 4 */
+.wl-clave { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+#wlClaveCaja { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+#wlClaveTxt { font: 13.5px/1.5 var(--mono); color: var(--text); background: var(--bg); border: 1px solid var(--fatal); border-radius: 8px; padding: 10px 12px; word-break: break-all; }

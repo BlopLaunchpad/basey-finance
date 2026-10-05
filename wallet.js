@@ -1,4 +1,5 @@
-/* basey · pestaña 10 (5-oct-2026, v2 tras la revision adversaria): una wallet EVM nueva cuya clave privada NO se enseña.
+/* basey · pestaña 10 (5-oct-2026, v4): una wallet EVM nueva cuya clave privada solo se enseña si se
+   pide en el paso 4, tras abrir el fichero guardado (v4, el dueño: la mete en Rabby, que importa por clave).
    - Aleatoriedad: 32 bytes del generador del sistema (crypto.getRandomValues), lo que aporten raton, teclado y toques, y otros
      32 bytes del sistema, todo junto por SHA-256. El generador del sistema ya da los 256 bits que caben en una clave; lo demas
      se mezcla encima y solo puede sumar. La clave se rechaza y se rehace si cae fuera del rango de secp256k1 (0 < k < n).
@@ -225,6 +226,7 @@
     if (!f) { msg("wlRes", "Choose the file first.", "mal"); return; }
     if (!pw) { msg("wlRes", "Type or paste the password.", "mal"); return; }
     $("wlComprobar").disabled = true;
+    olvidarClave(); // otra comprobacion: fuera la wallet abierta antes
     try {
       const texto = await f.text();
       let j;
@@ -243,6 +245,7 @@
         return;
       }
       comprobado = true;
+      abierta = w; $("wlClaveZona").hidden = false;
       msg("wlRes", "Your backup works: this file and the password on your paper open this wallet.", "ok");
       $("wlDir").textContent = w.address;
       $("wlListo").hidden = false;
@@ -259,6 +262,32 @@
     try { await navigator.clipboard.writeText(d); $("wlCopiar").textContent = "Copied"; }
     catch (e) { $("wlCopiar").textContent = "Select it by hand"; }
     setTimeout(() => { $("wlCopiar").textContent = "Copy"; }, 1800);
+  });
+
+  // ---- la clave privada: SOLO si se pide, tras abrir el fichero en el paso 4 (el dueño la mete en Rabby). Con confirmacion,
+  //      se esconde sola a los 2 min, y el portapapeles se sobrescribe al minuto de copiarla (si la pestaña sigue al frente).
+  let abierta = null, temporizador = null;
+  function esconderClave() {
+    $("wlClaveTxt").textContent = ""; $("wlClaveCaja").hidden = true; $("wlVerClave").hidden = false;
+    msg("wlClaveMsg", "");
+    if (temporizador) { clearTimeout(temporizador); temporizador = null; }
+  }
+  function olvidarClave() { esconderClave(); abierta = null; $("wlClaveZona").hidden = true; }
+  $("wlVerClave").addEventListener("click", () => {
+    if (!abierta) return;
+    if (!window.confirm("Show the private key on screen? Make sure nobody can see your screen.")) return;
+    $("wlClaveTxt").textContent = abierta.privateKey;
+    $("wlClaveCaja").hidden = false; $("wlVerClave").hidden = true;
+    temporizador = setTimeout(esconderClave, 120000);
+  });
+  $("wlClaveOcultar").addEventListener("click", esconderClave);
+  $("wlClaveCopiar").addEventListener("click", async () => {
+    if (!abierta) return;
+    try {
+      await navigator.clipboard.writeText(abierta.privateKey);
+      msg("wlClaveMsg", "Copied. Paste it into the wallet app now; this page overwrites the clipboard in 60 s if it's still open in front.", "ok");
+      setTimeout(() => { navigator.clipboard.writeText("-").catch(() => {}); }, 60000);
+    } catch (e) { msg("wlClaveMsg", "The browser didn't let the page copy: select the key by hand.", "mal"); }
   });
 
   // ---- no cerrar la pestaña con la wallet creada sin bajar ni comprobar la copia
