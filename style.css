@@ -547,3 +547,8 @@ body.locked > *:not(#gate) { display: none !important; }
 .olig-msg[data-kind="err"] { color: #ff7a59; }
 .olig-msg[data-kind="ok"] { color: #35d08a; }
 .olig-addr code { word-break: break-all; }
+
+/* 9 · Oligarc: el bloque del TEST, 5-oct-2026 */
+.olig-test { border: 1px dashed rgba(127,127,127,.45); border-radius: 10px; padding: 12px 14px; margin: 0 0 18px; }
+.olig-test h3 { margin: 0 0 6px; }
+.olig-test p { margin: 0 0 10px; }

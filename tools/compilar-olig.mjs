@@ -23,3 +23,14 @@ export const OLIG_ABI = ${JSON.stringify(abi)};
 `;
 fs.writeFileSync(path.join(RAIZ, "olig-codigo.js"), salida);
 console.log("olig-codigo.js | bytecode", (bytecode.length - 2) / 2, "bytes | md5", md5, "| solc", solc);
+// 5-oct: la copia de prueba (OligTest.sol: el mismo contrato con nombre, icono y redes de prueba), en su propio fichero
+const artT = JSON.parse(fs.readFileSync(path.join(RAIZ, "contratos-olig", "out", "OligTest.sol", "OligTest.json"), "utf8"));
+const bcT = artT.bytecode && artT.bytecode.object;
+if (!/^0x[0-9a-f]+$/i.test(bcT || "") || bcT.length < 2000) throw new Error("sin bytecode de OligTest: haz forge build");
+const md5T = crypto.createHash("md5").update(bcT).digest("hex");
+fs.writeFileSync(path.join(RAIZ, "olig-test-codigo.js"), `/* GENERADO por tools/compilar-olig.mjs el ${new Date().toISOString()} — no se edita a mano.
+   TEST: contratos-olig/src/OligTest.sol (el mismo contrato que Oligarc con nombre, icono y redes de prueba). md5 del bytecode: ${md5T} */
+export const OLIGTEST_BYTECODE = "${bcT}";
+export const OLIGTEST_BYTECODE_MD5 = "${md5T}";
+`);
+console.log("olig-test-codigo.js | bytecode", (bcT.length - 2) / 2, "bytes | md5", md5T);

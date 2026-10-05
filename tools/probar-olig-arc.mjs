@@ -9,7 +9,13 @@ import path from "node:path";
 import assert from "node:assert";
 import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
-import { OLIG_BYTECODE, OLIG_BYTECODE_MD5 } from "../olig-codigo.js";
+import { OLIG_BYTECODE as BC_OLIG, OLIG_BYTECODE_MD5 as MD5_OLIG } from "../olig-codigo.js";
+import { OLIGTEST_BYTECODE, OLIGTEST_BYTECODE_MD5 } from "../olig-test-codigo.js";
+// 5-oct: con el argumento "test" se prueba la copia de prueba (OligTest.sol) con sus valores
+const TEST = process.argv[2] === "test";
+const OLIG_BYTECODE = TEST ? OLIGTEST_BYTECODE : BC_OLIG, OLIG_BYTECODE_MD5 = TEST ? OLIGTEST_BYTECODE_MD5 : MD5_OLIG;
+const ESP = TEST ? { name: "TEST", symbol: "TEST", webp: "test-200.webp", website: "https://example.com/", twitter: "https://x.com/x", telegram: "https://t.me/telegram" }
+  : { name: "Oligarc", symbol: "OLIG", webp: "olig-200.webp", website: "https://oligarc.xyz", twitter: "https://x.com/oligarcxyz" };
 const RAIZ = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FEE = "0xF8eBF867Ae58179C85B1e158321eFB18c3dad0d5";
 const RPC = "https://arc.drpc.org";
@@ -37,14 +43,14 @@ const [tokenURI, logo, description, owner, name, symbol] = ["tokenURI", "logo", 
 const saldo = iface.decodeFunctionResult("balanceOf", sal[6])[0];
 assert.ok(tokenURI.startsWith("data:application/json;base64,"), "tokenURI");
 const json = JSON.parse(Buffer.from(tokenURI.slice(29), "base64").toString("utf8"));
-const webp = fs.readFileSync(path.join(RAIZ, "contratos-olig", "logo", "olig-200.webp"));
-assert.strictEqual(json.name, "Oligarc"); assert.strictEqual(json.symbol, "OLIG");
-assert.strictEqual(json.website, "https://oligarc.xyz"); assert.strictEqual(json.twitter, "https://x.com/oligarcxyz");
+const webp = fs.readFileSync(path.join(RAIZ, "contratos-olig", "logo", ESP.webp));
+assert.strictEqual(json.name, ESP.name); assert.strictEqual(json.symbol, ESP.symbol); assert.strictEqual(json.telegram, ESP.telegram);
+assert.strictEqual(json.website, ESP.website); assert.strictEqual(json.twitter, ESP.twitter);
 assert.ok(json.image === logo && logo.startsWith("data:image/webp;base64,"), "la imagen del JSON y logo() son la misma");
-assert.ok(Buffer.from(logo.slice(23), "base64").equals(webp), "la imagen NO es olig-200.webp");
+assert.ok(Buffer.from(logo.slice(23), "base64").equals(webp), "la imagen NO es " + ESP.webp);
 assert.strictEqual(owner, ethers.ZeroAddress);
 assert.strictEqual(saldo, 10n ** 27n);
 console.log("name", name, "| symbol", symbol, "| owner", owner, "| saldo de la wallet de comisiones", ethers.formatUnits(saldo, 18));
-console.log("JSON:", JSON.stringify(Object.assign({}, json, { image: "data:image/webp;base64,… (" + webp.length + " bytes, identica a olig-200.webp)" })));
+console.log("JSON:", JSON.stringify(Object.assign({}, json, { image: "data:image/webp;base64,… (" + webp.length + " bytes, identica a " + ESP.webp + ")" })));
 console.log("description:", description);
 console.log("TODO OK");
