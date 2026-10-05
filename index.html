@@ -871,7 +871,7 @@
   <div class="cols">
     <div class="col-form">
       <label class="field"><span>USDC to put in</span><input type="text" inputmode="decimal" id="oligPoolUsdc" value="2"><small>2 to 5 is plenty. Keep a little more in the wallet for gas.</small></label>
-      <label class="field"><span>Starting market cap, in $ (only if the pool doesn't exist yet)</span><input type="text" inputmode="decimal" id="oligPoolMc" value="1000000"><small>It sets the price GMGN will show. Nobody can buy at it: there is no OLIG in the pool.</small></label>
+      <label class="field"><span>Starting market cap, in $ (only if the pool doesn't exist yet)</span><input type="text" inputmode="decimal" id="oligPoolMc" value="1000000"><small>The pool's internal starting price; the USDC sits from a tenth of it up to it. GMGN shows no price for a pool with no trades (the official ARC token reads $0 there), and nobody can buy: there is no OLIG in the pool.</small></label>
       <button id="oligPoolBtn" class="btn btn-primary" type="button">Open the pool with USDC only</button>
       <p id="oligPoolMsg" class="olig-msg" aria-live="polite"></p>
     </div>
