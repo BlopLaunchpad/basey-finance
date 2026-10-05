@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Pestaña 10 (5-oct-2026). Esta pagina no puede hacer peticiones (connect-src 'none') ni cargar nada de fuera: solo sus
+     propios ficheros. Ni un script en linea ni un style="": la CSP los bloquearia. La CSP NO cubre las extensiones ni otra
+     pagina del mismo sitio que la abra: por eso el paso 0 y las guardas de wallet.js. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New wallet · basey</title>
+<link rel="stylesheet" href="style.css?v=27">
+<link rel="stylesheet" href="wallet.css?v=2">
+</head>
+<body>
+<main class="wl">
+  <div class="wl-top">
+    <span class="chip" id="wlDonde">&hellip;</span>
+    <span class="chip wl-red" id="wlRed">Network: checking&hellip;</span>
+  </div>
+
+  <h1>New wallet</h1>
+  <p class="lede">An EVM wallet (Arc, Hyperliquid and any other EVM chain) created and encrypted inside this tab. What you take away is an encrypted file; the address appears once you've checked your backup. This page can't make network requests of its own and loads nothing from outside.</p>
+  <p class="wl-aviso" id="wlParo" hidden></p>
+
+  <section class="wl-card wl-cero" id="wlS0">
+    <h2>0 &middot; Before you start</h2>
+    <p>For a wallet that will hold real money:</p>
+    <ul class="wl-lista">
+      <li><b>Open the copy on your own computer</b>, not the website: the file <code>wallet.html</code> in the launcher's folder (<code>arc-launcher</code>). Its fingerprint is written in BASEY.md.</li>
+      <li><b>In a Chrome Guest window</b> (profile icon &rarr; Guest). Extensions can read any page; a Guest window has none, and no saved passwords.</li>
+      <li><b>Switch Wi-Fi off</b> once the page has loaded. It doesn't need the network.</li>
+    </ul>
+  </section>
+
+  <section class="wl-card" id="wlS1">
+    <h2>1 &middot; Add your own randomness</h2>
+    <p>Move the mouse (or your finger) around the page and type anything until the bar fills. Your device's generator already gives the full 256 random bits a key can hold; this is mixed in on top of it, so it can only add, never take away.</p>
+    <div class="wl-barra">
+      <progress id="wlBarra" max="256" value="0"></progress>
+      <span id="wlBarraTxt">0 %</span>
+    </div>
+  </section>
+
+  <section class="wl-card" id="wlS2">
+    <h2>2 &middot; The password</h2>
+    <p>It encrypts the file, and the file plus the password is the wallet. <b>Nobody can recover it</b>: lose either and the wallet is gone for good. Best: let the page make one and write it on paper.</p>
+    <button class="btn" id="wlFrase" type="button">Make a password for me (8 words)</button>
+    <div class="wl-frase" id="wlFraseCaja" hidden>
+      <code id="wlFraseTxt"></code>
+      <small>Write it on paper now, exactly as shown, with the dashes. You'll type it again in step 4.</small>
+    </div>
+    <details class="wl-propia" id="wlPropia">
+      <summary>Or type your own</summary>
+      <p>At least 16 characters, and only plain letters, numbers and symbols: no accents, no &ntilde;, no &ordm; or &ordf;. MetaMask can't open a file whose password has them, even though this page could.</p>
+      <label class="field"><span>Password</span><input type="password" id="wlPass" autocomplete="off" spellcheck="false"></label>
+      <label class="field"><span>Repeat it</span><input type="password" id="wlPass2" autocomplete="off" spellcheck="false"></label>
+    </details>
+    <small class="wl-msg" id="wlPassMsg" aria-live="polite"></small>
+    <label class="wl-check"><input type="checkbox" id="wlPapel"> I've written the password on paper</label>
+    <p class="wl-fine">If the browser offers to suggest or save a password, say no.</p>
+  </section>
+
+  <section class="wl-card" id="wlS3">
+    <h2>3 &middot; Create and download</h2>
+    <button class="btn btn-primary" id="wlCrear" type="button" disabled>Create the wallet</button>
+    <p class="wl-msg" id="wlCreando" aria-live="polite"></p>
+    <div id="wlHecho" hidden>
+      <button class="btn btn-primary" id="wlBajar" type="button">Download the encrypted file</button>
+      <p class="wl-fine">Keep two copies in two different places (for example this computer and a USB stick), and the paper apart from both. The address appears in step 4, once the saved file has opened: don't send anything to the wallet before that.</p>
+    </div>
+  </section>
+
+  <section class="wl-card" id="wlS4">
+    <h2>4 &middot; Check your backup</h2>
+    <p>Open the file you saved, not this tab's memory, and <b>type the password from your paper</b> (pasting and autofill are refused here). This step also works on its own, any time, to check an old file.</p>
+    <label class="field"><span>Encrypted file (.json)</span><input type="file" id="wlFich" accept=".json,application/json"></label>
+    <label class="field"><span>Password</span><input type="password" id="wlPass3" autocomplete="off" spellcheck="false"></label>
+    <button class="btn" id="wlComprobar" type="button">Check this file</button>
+    <p class="wl-msg" id="wlRes" aria-live="polite"></p>
+    <div id="wlListo" hidden>
+      <span class="wl-etq">Address</span>
+      <div class="wl-dir"><code id="wlDir"></code><button class="btn btn-sm" id="wlCopiar" type="button">Copy</button></div>
+    </div>
+  </section>
+
+  <section class="wl-card" id="wlS5" hidden>
+    <h2>5 &middot; Next</h2>
+    <ul class="wl-lista">
+      <li>Close this tab (better, the whole Guest window) now.</li>
+      <li>Use the wallet from a browser profile of its own. In MetaMask: Add account &rarr; Import account &rarr; JSON file, with this file and the password. From then on MetaMask can show this key with <b>its</b> password, so that password now protects everything: make it long, and keep nothing else in that profile.</li>
+      <li>Fund it from your exchange account, not from your other wallets, so nothing links them on-chain.</li>
+      <li>When the hardware wallets and the 2-of-3 Safe are ready, the tokens and the fund move there. This wallet can stay as the fee wallet, holding little.</li>
+    </ul>
+  </section>
+</main>
+<script src="ethers-6.17.0.umd.min.js"></script>
+<script src="wallet.js?v=2"></script>
+</body>
+</html>

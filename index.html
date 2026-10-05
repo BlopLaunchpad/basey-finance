@@ -16,7 +16,7 @@
 <meta name="googlebot" content="noindex, nofollow">
 <!-- Sin `description` a proposito: es lo que un buscador enseña bajo el
      titulo, y aqui no queremos ni titulo ni resumen. -->
-<link rel="stylesheet" href="style.css?v=26">
+<link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
 
@@ -88,6 +88,7 @@
   <button class="step" data-step="7"><b>7</b> Wallets</button>
   <button class="step step-wide" data-step="8"><b>8</b> Our launchpad</button>
   <button class="step step-wide" data-step="9"><b>9</b> Oligarc $OLIG</button>
+  <button class="step" data-step="10"><b>10</b> New wallet</button>
 </nav>
 
 <main>
@@ -866,6 +867,20 @@
   </div>
 </section>
 
+<!-- ───────────────────────── 10 · NEW WALLET ───────────────────────── -->
+<section class="panel" data-panel="10" hidden>
+  <h2>New wallet</h2>
+  <p class="lede">A new EVM wallet whose private key is never shown: it is created and encrypted in your browser, and you take away an encrypted file that MetaMask imports. The generator is a page of its own that can't make network requests and loads nothing from outside.</p>
+  <h2>For a wallet that will hold real money</h2>
+  <ul class="lede">
+    <li><b>Don't open it from here.</b> Open the copy on this computer: the file <code>wallet.html</code> in the launcher's folder (<code>arc-launcher</code>), whose fingerprint is in BASEY.md. The website copy shares its site with this launcher and is downloaded fresh each time; the local file is the one that was reviewed.</li>
+    <li>In a Chrome Guest window (no extensions, no saved passwords), with Wi-Fi off once it has loaded.</li>
+    <li>Let it make the password (8 words), write it on paper, and check the backup in its step 4 before funding. The address only appears after that check.</li>
+    <li>Fund it from your exchange account, not from your other wallets. Then step 9 creates $OLIG from it.</li>
+  </ul>
+  <p><a class="btn" href="wallet.html" target="_blank" rel="noopener noreferrer">Open the website copy (for tests)</a></p>
+</section>
+
 </main>
 
 <footer class="foot">
@@ -876,7 +891,7 @@
   </span>
 </footer>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js" integrity="sha384-gpR0Q6Hx/O+uevlbpbANbS0LWjbejPV1sqD/8w422l/fW8whGY0EPmKw3uG7ACYP" crossorigin="anonymous"></script>
 <!-- EL MOTOR DE RUTAS (V4, hooks de Arguspad, puentes): copia BYTE A BYTE de
      arcmagnate/demo/router/rutas.js, no se edita aqui. Deja window.Rutas; lo
      usa motor-rutas.js, que importa app.js. -->

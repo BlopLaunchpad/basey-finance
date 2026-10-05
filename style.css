@@ -558,3 +558,6 @@ body.locked > *:not(#gate) { display: none !important; }
 .olig-pool-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 0 0 12px; }
 .olig-pool-row label { display: grid; gap: 4px; font-size: 14px; }
 .olig-pool-row input { width: 100%; box-sizing: border-box; }
+
+/* Pestaña 10 (5-oct-2026): un enlace con pinta de boton no lleva subrayado. */
+a.btn { display: inline-block; text-decoration: none; }
