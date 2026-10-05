@@ -16,6 +16,9 @@
    - No toca nada del resto del launcher: su propio proveedor de lectura (rpc.mainnet.arc.io). */
 import { OLIG_BYTECODE, OLIG_BYTECODE_MD5, OLIG_SOLC, OLIG_ABI } from "./olig-codigo.js?v=2";
 import { OLIGTEST_BYTECODE } from "./olig-test-codigo.js?v=1";
+// 5-oct: el pool Uniswap V4 de un token que ya existe (el TEST), abajo del todo de la pestaña. Ver olig-pool.js
+import { planPoolV4, sqrtDePool, V4 } from "./olig-pool.js?v=1";
+import { permit2Steps } from "./v4.js?v=1";
 
 const FEE_WALLET = "0xf8ebf867ae58179c85b1e158321efb18c3dad0d5";
 const ARC = { id: 5042, hex: "0x13b2", rpc: "https://rpc.mainnet.arc.io", explorer: "https://explorer.arc.io" };
@@ -121,8 +124,53 @@ async function desplegar(m) {
   } finally { btn.disabled = false; await pintar(m); }
 }
 
+/* El pool V4 (5-oct): tres firmas de la wallet del navegador, que es la que tiene el token. Nunca el del $OLIG de verdad. */
+async function abrirPool() {
+  const btn = $("oligPoolBtn");
+  if (!btn || btn.disabled) return;
+  const msg = (t, k) => { const el = $("oligPoolMsg"); if (el) { el.textContent = t || ""; el.dataset.kind = k || ""; } };
+  const eth = window.ethereum;
+  if (!eth) { msg("No browser wallet found. Open this page in the browser of the wallet that holds the token.", "err"); return; }
+  const token = String($("oligPoolToken").value || "").trim();
+  const mc = Number($("oligPoolMc").value);
+  btn.disabled = true;
+  try {
+    if (!window.ethers.isAddress(token)) throw new Error("Paste the token address.");
+    const real = leer(MODOS.real);
+    if (real && real.address && real.address.toLowerCase() === token.toLowerCase()) throw new Error("That is $OLIG. Its pool opens on the day of the airdrop, not from here.");
+    msg("Connecting your wallet…");
+    const [cuenta] = await eth.request({ method: "eth_requestAccounts" });
+    const a = String(cuenta || "").toLowerCase();
+    await asegurarArc(eth);
+    const erc = new window.ethers.Contract(token, ["function decimals() view returns (uint8)", "function totalSupply() view returns (uint256)", "function balanceOf(address) view returns (uint256)", "function symbol() view returns (string)"], lector());
+    const [dec, sup, bal, sym] = await Promise.all([erc.decimals(), erc.totalSupply(), erc.balanceOf(a), erc.symbol()]);
+    const plan = planPoolV4({ token, decimals: dec, supply: sup, mcUsd: mc, wallTokens: bal, owner: a });
+    if ((await sqrtDePool(plan.id, lector())) !== 0n) throw new Error("This pool already exists on Uniswap V4. Nothing was signed.");
+    const cuanto = Number(window.ethers.formatUnits(bal, dec)).toLocaleString("en-US");
+    const firmante = await new window.ethers.BrowserProvider(eth).getSigner();
+    msg("Signatures 1 and 2 of 3: Permit2 for " + sym + "…");
+    await permit2Steps(window.ethers, firmante, token, bal, (t) => msg(t));
+    msg("Signature 3 of 3: open the pool at $" + mc.toLocaleString("en-US") + " market cap and place the wall with " + cuanto + " " + sym + "…");
+    const tx = await firmante.sendTransaction({ to: V4.positionManager, data: plan.multicall });
+    msg("Sent " + corto(tx.hash) + ". Waiting for Arc…");
+    const rc = await lector().waitForTransaction(tx.hash, 1, 180000);
+    if (!rc || rc.status !== 1) throw new Error("The pool transaction didn't go through (status " + (rc ? rc.status : "unknown") + ").");
+    try { localStorage.setItem("basey.olig.pool", JSON.stringify({ token, id: plan.id, tx: tx.hash, mc, at: Date.now() })); } catch (e) { /* modo privado */ }
+    $("oligPoolOut").innerHTML = "<p>V4 pool <code>" + esc(plan.id.slice(0, 18)) + "…</code> open at $" + esc(mc.toLocaleString("en-US")) + " market cap, wall of " + esc(cuanto) + " " + esc(sym) +
+      ' · tx <a href="' + ARC.explorer + "/tx/" + esc(tx.hash) + '" target="_blank" rel="noopener">' + esc(corto(tx.hash)) + '</a> · <a href="https://gmgn.ai/arc/token/' + esc(token) + '" target="_blank" rel="noopener">GMGN</a></p>';
+    msg("Pool open with its wall. Buy a little on GMGN to start it, then check the picture and links.", "ok");
+  } catch (e) {
+    msg(e && (e.code === 4001 || e.code === "ACTION_REJECTED") ? "You rejected it in the wallet. Nothing more was sent." : (e && (e.shortMessage || e.message)) || String(e), "err");
+  } finally { btn.disabled = false; }
+}
+
 function iniciar() {
   if (!$("oligBtn")) return;
+  if ($("oligPoolBtn")) {
+    $("oligPoolBtn").addEventListener("click", abrirPool);
+    const t = leer(MODOS.test);
+    if (t && t.address && !$("oligPoolToken").value) $("oligPoolToken").value = t.address;
+  }
   $("oligSolc").textContent = OLIG_SOLC + " · cancun · md5 " + OLIG_BYTECODE_MD5.slice(0, 10);
   $("oligBtn").addEventListener("click", () => desplegar(MODOS.real));
   if ($("oligTestBtn")) $("oligTestBtn").addEventListener("click", () => desplegar(MODOS.test));

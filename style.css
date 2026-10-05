@@ -552,3 +552,9 @@ body.locked > *:not(#gate) { display: none !important; }
 .olig-test { border: 1px dashed rgba(127,127,127,.45); border-radius: 10px; padding: 12px 14px; margin: 0 0 18px; }
 .olig-test h3 { margin: 0 0 6px; }
 .olig-test p { margin: 0 0 10px; }
+
+/* 9 · el pool V4 del TEST, 5-oct-2026 */
+.olig-pool { margin-top: 18px; }
+.olig-pool-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 0 0 12px; }
+.olig-pool-row label { display: grid; gap: 4px; font-size: 14px; }
+.olig-pool-row input { width: 100%; box-sizing: border-box; }
