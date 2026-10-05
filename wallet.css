@@ -40,3 +40,10 @@
 .wl-propia p { margin-top: 8px; font-size: 13px; }
 .wl-check { display: flex; gap: 8px; align-items: center; margin: 12px 0 4px; font-size: 14px; color: var(--text); cursor: pointer; }
 .wl-check input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+/* boton Show junto a cada contraseña, y la fila del Copy de la frase */
+.wl .field > label { font-size: 13px; color: var(--text-dim); }
+.wl-pw { display: flex; gap: 8px; align-items: stretch; }
+.wl-pw input { flex: 1; min-width: 0; }
+.wl-pw input[type="text"] { font: 14px var(--mono); color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.wl-fila { display: flex; gap: 8px; }

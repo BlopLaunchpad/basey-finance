@@ -7,8 +7,9 @@
    - Contraseña: la pagina propone 8 palabras BIP39 (88 bits) o se teclea una propia de 16+ caracteres SOLO ASCII imprimible:
      ethers la normaliza (NFKC) y MetaMask no, asi que con º, ª, tildes sueltas o espacios duros el paso 4 daria OK y MetaMask
      no abriria el fichero (medido en la revision).
-   - La direccion NO se enseña hasta que el paso 4 abre el fichero GUARDADO con la contraseña tecleada (ni pegada ni
-     autorrellenada): nadie fondea una wallet sin copia comprobada.
+   - La direccion NO se enseña hasta que el paso 4 abre el fichero GUARDADO con la contraseña: nadie fondea una wallet sin
+     copia comprobada. (v3, el dueño desde el movil: la frase va con espacios, el paso 4 acepta pegar y cada campo tiene Show
+     para compararla con el papel; antes se rechazaba lo pegado.)
    - Guardas: se para si la abre otra pagina (window.opener) o va dentro de un marco (window.top): la CSP no protege de una
      pagina del mismo sitio con una referencia a esta ventana. La red se da por bloqueada solo si salta la violacion de CSP
      connect-src y el meta CSP esta como debe; un simple fallo de red no vale.
@@ -86,7 +87,7 @@
     anotar(t.clientX + t.clientY / 1e4, t.force || 0, e.timeStamp);
   }, { passive: true });
   document.addEventListener("keydown", (e) => {
-    if (e.target && e.target.type === "password") return;
+    if (e.target && e.target.tagName === "INPUT") return; // las contraseñas (tambien con Show, que las pasa a texto)
     anotar(e.timeStamp, e.repeat ? 1 : 0, eventos);
   });
 
@@ -95,8 +96,23 @@
     const lista = E.wordlists.en, r = crypto.getRandomValues(new Uint16Array(8)), w = [];
     for (let i = 0; i < 8; i++) w.push(lista.getWord(r[i] & 2047)); // 65536 es multiplo de 2048: sin sesgo
     r.fill(0);
-    return w.join("-");
+    return w.join(" ");
   }
+  // Show / Hide en cada contraseña
+  for (const b of document.querySelectorAll(".wl-ver")) {
+    b.addEventListener("click", () => {
+      const i = $(b.dataset.para), ver = i.type === "password";
+      i.type = ver ? "text" : "password";
+      b.textContent = ver ? "Hide" : "Show";
+      b.setAttribute("aria-pressed", String(ver));
+    });
+  }
+  $("wlFraseCopiar").addEventListener("click", async () => {
+    if (!frase) return;
+    try { await navigator.clipboard.writeText(frase); $("wlFraseCopiar").textContent = "Copied"; }
+    catch (e) { $("wlFraseCopiar").textContent = "Select it by hand"; }
+    setTimeout(() => { $("wlFraseCopiar").textContent = "Copy"; }, 1800);
+  });
   $("wlFrase").addEventListener("click", () => {
     if (fichero) return;
     frase = hacerFrase();
@@ -202,21 +218,12 @@
     $("wlBajar").textContent = "Download it again";
   });
 
-  // ---- 4. comprobar la copia: el fichero guardado y la contraseña TECLEADA (ni pegada ni autorrellenada)
-  let tecleada = true;
-  $("wlPass3").addEventListener("input", (e) => {
-    const t = e.inputType || "";
-    if (t && !/^(insertText|insertCompositionText|deleteContent|deleteWord|deleteSoft|deleteHard|historyUndo|historyRedo)/.test(t)) tecleada = false;
-    if (!$("wlPass3").value) tecleada = true; // vaciar el campo da otra oportunidad
-  });
+  // ---- 4. comprobar la copia: el fichero guardado y la contraseña (tecleada o pegada)
   $("wlComprobar").addEventListener("click", async () => {
     const f = $("wlFich").files && $("wlFich").files[0];
     const pw = $("wlPass3").value;
-    let autorrelleno = false;
-    try { autorrelleno = $("wlPass3").matches(":autofill"); } catch (e) { try { autorrelleno = $("wlPass3").matches(":-webkit-autofill"); } catch (e2) { /* */ } }
     if (!f) { msg("wlRes", "Choose the file first.", "mal"); return; }
-    if (!pw) { msg("wlRes", "Type the password.", "mal"); return; }
-    if (!tecleada || autorrelleno) { $("wlPass3").value = ""; tecleada = true; msg("wlRes", "Type it from your paper, key by key: pasted or autofilled passwords don't prove the paper is right.", "mal"); return; }
+    if (!pw) { msg("wlRes", "Type or paste the password.", "mal"); return; }
     $("wlComprobar").disabled = true;
     try {
       const texto = await f.text();
@@ -242,7 +249,7 @@
       $("wlS5").hidden = false;
     } catch (e) {
       const m = String(e && e.message || e);
-      msg("wlRes", /password/i.test(m) ? "Wrong password for this file." : "It didn't open: " + m, "mal");
+      msg("wlRes", /password/i.test(m) ? "Wrong password for this file. Press Show and compare it with your paper: exactly one space between words, no space at the start or the end." : "It didn't open: " + m, "mal");
     } finally {
       $("wlComprobar").disabled = false;
     }

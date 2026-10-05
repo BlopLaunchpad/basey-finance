@@ -11,7 +11,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>New wallet · basey</title>
 <link rel="stylesheet" href="style.css?v=27">
-<link rel="stylesheet" href="wallet.css?v=2">
+<link rel="stylesheet" href="wallet.css?v=3">
 </head>
 <body>
 <main class="wl">
@@ -49,13 +49,14 @@
     <button class="btn" id="wlFrase" type="button">Make a password for me (8 words)</button>
     <div class="wl-frase" id="wlFraseCaja" hidden>
       <code id="wlFraseTxt"></code>
-      <small>Write it on paper now, exactly as shown, with the dashes. You'll type it again in step 4.</small>
+      <div class="wl-fila"><button class="btn btn-sm" id="wlFraseCopiar" type="button">Copy</button></div>
+      <small>Write it on paper now: 8 words, one space between them. You'll type or paste it again in step 4.</small>
     </div>
     <details class="wl-propia" id="wlPropia">
       <summary>Or type your own</summary>
       <p>At least 16 characters, and only plain letters, numbers and symbols: no accents, no &ntilde;, no &ordm; or &ordf;. MetaMask can't open a file whose password has them, even though this page could.</p>
-      <label class="field"><span>Password</span><input type="password" id="wlPass" autocomplete="off" spellcheck="false"></label>
-      <label class="field"><span>Repeat it</span><input type="password" id="wlPass2" autocomplete="off" spellcheck="false"></label>
+      <div class="field"><label for="wlPass">Password</label><div class="wl-pw"><input type="password" id="wlPass" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"><button class="btn btn-sm wl-ver" type="button" data-para="wlPass" aria-pressed="false">Show</button></div></div>
+      <div class="field"><label for="wlPass2">Repeat it</label><div class="wl-pw"><input type="password" id="wlPass2" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"><button class="btn btn-sm wl-ver" type="button" data-para="wlPass2" aria-pressed="false">Show</button></div></div>
     </details>
     <small class="wl-msg" id="wlPassMsg" aria-live="polite"></small>
     <label class="wl-check"><input type="checkbox" id="wlPapel"> I've written the password on paper</label>
@@ -74,9 +75,9 @@
 
   <section class="wl-card" id="wlS4">
     <h2>4 &middot; Check your backup</h2>
-    <p>Open the file you saved, not this tab's memory, and <b>type the password from your paper</b> (pasting and autofill are refused here). This step also works on its own, any time, to check an old file.</p>
+    <p>Open the file you saved, not this tab's memory, and <b>type or paste the password</b>; press Show to check it letter by letter against your paper. This step also works on its own, any time, to check an old file.</p>
     <label class="field"><span>Encrypted file (.json)</span><input type="file" id="wlFich" accept=".json,application/json"></label>
-    <label class="field"><span>Password</span><input type="password" id="wlPass3" autocomplete="off" spellcheck="false"></label>
+    <div class="field"><label for="wlPass3">Password</label><div class="wl-pw"><input type="password" id="wlPass3" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"><button class="btn btn-sm wl-ver" type="button" data-para="wlPass3" aria-pressed="false">Show</button></div></div>
     <button class="btn" id="wlComprobar" type="button">Check this file</button>
     <p class="wl-msg" id="wlRes" aria-live="polite"></p>
     <div id="wlListo" hidden>
@@ -96,6 +97,6 @@
   </section>
 </main>
 <script src="ethers-6.17.0.umd.min.js"></script>
-<script src="wallet.js?v=2"></script>
+<script src="wallet.js?v=3"></script>
 </body>
 </html>

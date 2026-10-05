@@ -106,9 +106,9 @@ try {
   await page.click("#wlPropia summary");
 
   const r1 = await crearConFrase(page);
-  comprobar("la frase son 8 palabras BIP39 con guiones", r1.frase.split("-").length === 8 && r1.frase.split("-").every((w) => ethers.wordlists.en.getWordIndex(w) >= 0), r1.frase);
+  comprobar("la frase son 8 palabras BIP39 con un espacio", r1.frase.split(" ").length === 8 && r1.frase.split(" ").every((w) => ethers.wordlists.en.getWordIndex(w) >= 0), r1.frase);
   comprobar("sin marcar 'en papel' no se puede crear", r1.antesPapel);
-  comprobar("creada; la frase ya no se ve", !(await oculto(page, "wlHecho")) && !(await texto(page, "wlFraseTxt")).includes(r1.frase.split("-")[0] + "-"));
+  comprobar("creada; la frase ya no se ve", !(await oculto(page, "wlHecho")) && (await oculto(page, "wlFraseCaja")) && !(await page.evaluate(() => document.body.innerHTML)).includes(r1.frase));
   comprobar("la direccion NO se ve todavia", await oculto(page, "wlListo"));
 
   const f1 = await bajar(page, []);
@@ -124,16 +124,19 @@ try {
   comprobar("la direccion NO esta en el DOM antes del paso 4", !html1.includes(w1.address.slice(2).toLowerCase()));
   comprobar("nada en localStorage ni sessionStorage", await page.evaluate(() => localStorage.length === 0 && sessionStorage.length === 0));
 
-  // paso 4: pegada, mala, buena
+  // paso 4: mala, con un espacio de mas, y la buena PEGADA (v3: pegar vale); Show la enseña
   await (await page.$("#wlFich")).uploadFile(path.join(bajadas, f1));
-  await page.$eval("#wlPass3", (e, v) => { e.value = v; e.dispatchEvent(new InputEvent("input", { inputType: "insertFromPaste", data: v })); }, r1.frase);
-  await page.click("#wlComprobar");
-  await page.waitForFunction(() => document.getElementById("wlRes").classList.contains("is-mal"), { timeout: 10000 });
-  comprobar("contraseña PEGADA: rechazada", /from your paper/.test(await texto(page, "wlRes")), await texto(page, "wlRes"));
-  comprobar("contraseña mala: lo dice", /Wrong password/.test(await comprobarFichero(page, f1, "no-es-esta-para-nada")));
+  comprobar("contraseña mala: lo dice", /Wrong password/.test(await comprobarFichero(page, f1, "no es esta para nada")));
+  comprobar("con un espacio de mas: mala, y avisa de los espacios", /one space between words/.test(await comprobarFichero(page, f1, r1.frase.replace(" ", "  "))));
   comprobar("contraseña mala: ni direccion ni paso 5", (await oculto(page, "wlListo")) && (await oculto(page, "wlS5")));
-  const ok1 = await comprobarFichero(page, f1, r1.frase);
-  comprobar("frase tecleada: la copia funciona", /backup works/.test(ok1), ok1);
+  await page.$eval("#wlPass3", (e, v) => { e.value = v; e.dispatchEvent(new InputEvent("input", { inputType: "insertFromPaste", data: v })); }, r1.frase);
+  await page.click('.wl-ver[data-para="wlPass3"]');
+  comprobar("Show enseña la contraseña", await page.$eval("#wlPass3", (e) => e.type === "text") && (await page.$eval('.wl-ver[data-para="wlPass3"]', (b) => b.textContent)) === "Hide");
+  await page.$eval("#wlRes", (e) => { e.textContent = ""; e.className = "wl-msg"; });
+  await page.click("#wlComprobar");
+  await page.waitForFunction(() => { const r = document.getElementById("wlRes"); return r.classList.contains("is-ok") || r.classList.contains("is-mal"); }, { timeout: 60000 });
+  const ok1 = await texto(page, "wlRes");
+  comprobar("frase PEGADA: la copia funciona", /backup works/.test(ok1), ok1);
   comprobar("y ahora si: la direccion es la del fichero y sale el paso 5", (await texto(page, "wlDir")) === w1.address && !(await oculto(page, "wlS5")));
   await page.screenshot({ path: path.join(CAPTURAS, "wallet-pc-comprobada.png"), fullPage: true });
 
