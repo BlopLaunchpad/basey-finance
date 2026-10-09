@@ -12,6 +12,10 @@
  * requestAnimationFrame for entrances (background tabs freeze it; CSS
  * transitions and setTimeout instead), no transforms on chart ancestors. */
 
+/* equity de un puesto: el motor la manda (equity); si no, efectivo + importe + P&L abierto de cada posicion */
+function equityDe(a) { if (!a) return 0; if (typeof a.equity === 'number') return a.equity; return (a.saldo || 0) + Object.values(a.posiciones || {}).reduce((x, q) => x + (q.importe || 0) + (q.pnlAbierto || 0), 0); }
+
+
 import { initOficina, updateOficina, fichaExtraHTML, agoShort, DISPARO_LABEL } from './academia-oficina.js?v=2';
 
 const ENGINE_LOCAL = 'http://localhost:4360';
@@ -324,7 +328,8 @@ function deskHTML(p, now) {
       `<span class="pill dim">vacant</span><span>waiting for the first validated candidates</span></div>`;
   }
   const a = p.agente;
-  const pnlPct = a.saldoInicial ? (a.saldo - a.saldoInicial) / a.saldoInicial * 100 : 0;
+  const eqDesk = equityDe(a); // lo que vale el puesto: efectivo + posiciones abiertas (el saldo solo es el efectivo libre)
+  const pnlPct = a.saldoInicial ? (eqDesk - a.saldoInicial) / a.saldoInicial * 100 : 0;
   const ops = (a.operaciones || []).slice(0, 3);
   let trades = '';
   if (ops.length) {
@@ -345,7 +350,7 @@ function deskHTML(p, now) {
   const rugs = (a.operaciones || []).filter((o) => o.motivo === 'muerto').length;
   return `<div class="desk-n">desk ${p.n}</div>` +
     `<div class="desk-head">${avatarSVG(a.id)}<div style="min-width:0"><div class="desk-name">${esc(a.nombre)}</div><div class="desk-strategy">${esc(a.descripcion || '')}</div></div></div>` +
-    `<div class="desk-money"><span class="bal">${money(a.saldo)}</span><span class="pnl ${cls(pnlPct)}">${pct(pnlPct)}</span></div>` +
+    `<div class="desk-money"><span class="bal">${money(eqDesk)}</span><span class="pnl ${cls(pnlPct)}">${pct(pnlPct)}</span></div>` +
     `<div class="desk-badge">${estadoPill(a.estado)}<span class="pill dim">DD ${num(a.maxDDPct, 1)}%</span>${a.estado === 'observacion' && a.diasObservacion ? `<span class="pill warn">day ${a.diasObservacion}</span>` : ''}${rugs ? `<span class="pill bad" title="positions that went to zero">${rugs} rug${rugs > 1 ? 's' : ''}</span>` : ''}</div>` +
     sparkline(a.curva) +
     (posHtml ? `<div class="desk-pos">${posHtml}</div>` : '') +
@@ -359,7 +364,7 @@ function renderOffice() {
   const now = Date.now();
   // summary
   const hired = puestos.filter((p) => p.agente);
-  const bal = hired.reduce((s, p) => s + (p.agente.saldo || 0), 0);
+  const bal = hired.reduce((s, p) => s + equityDe(p.agente), 0);
   const ini = hired.reduce((s, p) => s + (p.agente.saldoInicial || 0), 0);
   const inPos = hired.reduce((s, p) => s + Object.values(p.agente.posiciones || {}).reduce((x, q) => x + (q.importe || 0) + (q.pnlAbierto || 0), 0), 0);
   const pnl = bal + inPos - ini;
