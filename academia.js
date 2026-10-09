@@ -7,6 +7,8 @@
  * requestAnimationFrame for entrances (background tabs freeze it; CSS
  * transitions and setTimeout instead), no transforms on chart ancestors. */
 
+import { initOficina, updateOficina, fichaExtraHTML, nextCandleClose, agoShort } from './academia-oficina.js?v=1';
+
 const API = 'http://localhost:4340';
 const SNAPSHOT = 'academia/estado.json';
 const REFRESH_MS = 15000;
@@ -276,12 +278,25 @@ function deskHTML(p, precios) {
     trades = `<div class="desk-empty">no trades yet</div>`;
   }
   const posHtml = positionRows(a, precios);
+  // why it is not trading yet: desks only act on candle closes of their interval
+  let waiting = '';
+  if (!Object.keys(a.posiciones || {}).length) {
+    const nc = nextCandleClose(a.g?.intervalo);
+    const seen = a.vistas ?? a.velasVistas ?? null;
+    const lastSig = a.ultimaSenal || a.ultimaSeñal || null;
+    const lastCandle = a.ultimaVela || null;
+    waiting = `<div class="desk-wait">Hired ${esc(agoShort(a.contratado))} · waits for the next ${esc(a.g?.intervalo || '1h')} candle close (${nc.label} UTC, in ${nc.inMin} min)` +
+      (lastCandle ? ` · last candle seen ${esc(dateShort(lastCandle))}` : '') +
+      (seen != null ? ` · ${num(seen, 0)} candles checked` : '') +
+      ` · last signal check: ${lastSig ? esc(dateShort(lastSig)) : (a.operaciones || []).length ? 'fired ' + (a.operaciones || []).length + ' time(s)' : 'none fired'}</div>`;
+  }
   return `<div class="desk-n">desk ${p.n}</div>` +
     `<div class="desk-head">${avatarSVG(a.id)}<div style="min-width:0"><div class="desk-name">${esc(a.nombre)}</div><div class="desk-strategy">${esc(a.descripcion || '')}</div></div></div>` +
     `<div class="desk-money"><span class="bal">${money(a.saldo)}</span><span class="pnl ${cls(pnlPct)}">${pct(pnlPct)}</span></div>` +
     `<div class="desk-badge">${estadoPill(a.estado)}<span class="pill dim">DD ${num(a.maxDDPct, 1)}%</span>${a.estado === 'observacion' && a.diasObservacion ? `<span class="pill warn">day ${a.diasObservacion}</span>` : ''}</div>` +
     sparkline(a.curva) +
     (posHtml ? `<div class="desk-pos">${posHtml}</div>` : '') +
+    waiting +
     trades;
 }
 
@@ -312,7 +327,7 @@ function renderOffice() {
   puestos.forEach((p, i) => {
     const el = wrap.children[i];
     const a = p.agente;
-    const sig = JSON.stringify([a?.id, a?.estado, a?.saldo, a?.maxDDPct, a?.diasObservacion, a?.posiciones, (a?.operaciones || []).slice(0, 3), (a?.curva || []).length, (a?.curva || []).slice(-1), (a?.g?.mercados || []).map((c) => precios[c])]);
+    const sig = JSON.stringify([a?.id, a?.estado, a?.saldo, a?.maxDDPct, a?.diasObservacion, a?.posiciones, (a?.operaciones || []).slice(0, 3), (a?.curva || []).length, (a?.curva || []).slice(-1), (a?.g?.mercados || []).map((c) => precios[c]), Math.floor(Date.now() / 60000)]);
     if (S.sig['desk' + p.n] === sig) return;
     S.sig['desk' + p.n] = sig;
     el.className = 'desk' + (a ? '' : ' vacant');
@@ -855,6 +870,7 @@ async function openAgent(id) {
   let html = `<div class="modal-head">${avatarSVG(a.id)}<div style="min-width:0"><h3>${esc(a.nombre)}</h3><div class="mh-sub"><span>${esc(a.id)}</span><span>· gen ${gen ?? '?'}</span><span>· ${esc(a.origen || '')}</span>${where}${estado}</div></div><button class="modal-close" type="button" data-close>×</button></div>`;
   html += `<div class="modal-body">`;
   html += `<div><h4>Strategy</h4><div class="strategy">${esc(a.descripcion || '—')}</div>${a.motivo ? `<div class="loading" style="margin-top:4px">${esc(a.motivo)}</div>` : ''}</div>`;
+  html += fichaExtraHTML(a, S.data, (pid) => { const m = stateMap().get(pid); return m?.nombre || S.data?.academia?.genealogia?.[pid]?.nombre || null; });
   if (a.kind === 'desk') {
     const pnlPct = a.saldoInicial ? (a.saldo - a.saldoInicial) / a.saldoInicial * 100 : 0;
     html += `<div><h4>At the desk</h4><div class="office-summary" style="margin:0">` +
@@ -893,6 +909,7 @@ function toast(msg) {
 /* ── render everything ─────────────────────────────────── */
 function render() {
   renderHeader();
+  updateOficina(S.data, S.live);
   if (!S.data) {
     setHTML($('officeSummary'), '', 'officeSummary');
     setHTML($('desks'), `<div class="notice" style="grid-column:1/-1">Nothing to show: the engine at localhost:4340 is not answering and there is no snapshot at academia/estado.json.</div>`, 'desksEmpty');
@@ -923,6 +940,7 @@ function init() {
   $('modal').addEventListener('click', (ev) => { if (ev.target === $('modal')) closeModal(); });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeModal(); });
   $('hallCanvas').addEventListener('click', hallClick);
+  initOficina({ canvas: $('floorCanvas'), wrap: $('floorWrap'), openAgent, toast });
   $('holdCouncil').addEventListener('click', holdCouncil);
   let resizeTimer = null;
   window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { renderHistory(); if (S.data?.evolucion) drawHall(S.data.evolucion.poblacion || [], new Set((S.data.academia?.puestos || []).filter((p) => p.agente).map((p) => p.agente.id)), S.prevPop || new Set()); }, 150); });

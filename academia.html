@@ -7,7 +7,7 @@
 <!-- Private tool, same policy as the rest of basey.finance: out of search engines. -->
 <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
 <meta name="googlebot" content="noindex, nofollow">
-<link rel="stylesheet" href="academia.css?v=1">
+<link rel="stylesheet" href="academia.css?v=2">
 </head>
 <body>
 
@@ -30,8 +30,21 @@
   <div class="cols">
     <div class="col-main">
 
+      <section id="floor">
+        <h2>The office floor <span class="sub">tap an agent or a desk · they talk, walk and take tea</span></h2>
+        <div class="floor-wrap" id="floorWrap"><canvas id="floorCanvas" width="300" height="200"></canvas></div>
+        <div class="floor-legend">
+          <span><i style="background:#3fbf7f"></i>performing</span>
+          <span><i style="background:#d9a441"></i>probation</span>
+          <span><i style="background:#e05260"></i>fired, walking out</span>
+          <span>screen: <b style="color:#3fbf7f">green</b> P&amp;L up · <b style="color:#e05260">red</b> down · blinks on open / close</span>
+          <span>tea room: on probation or nothing open</span>
+        </div>
+      </section>
+
       <section id="office">
         <h2>The Office <span class="sub" id="officeSub">10 desks</span></h2>
+        <p class="office-note">Desks trade only on candle closes (15m / 1h / 4h); first trades usually appear within hours of hiring. A desk with nothing open says below what it is waiting for.</p>
         <div class="office-summary" id="officeSummary"></div>
         <div class="desks" id="desks"></div>
       </section>
@@ -131,6 +144,6 @@
   </defs>
 </svg>
 
-<script type="module" src="academia.js?v=1"></script>
+<script type="module" src="academia.js?v=2"></script>
 </body>
 </html>
