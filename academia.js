@@ -364,6 +364,7 @@ function renderOffice() {
   const now = Date.now();
   // summary
   const hired = puestos.filter((p) => p.agente);
+  const libro = d?.academia?.libro || null; // el libro mayor: P&L de todas las mesas desde que se abrio, no se reinicia
   const bal = hired.reduce((s, p) => s + equityDe(p.agente), 0);
   const ini = hired.reduce((s, p) => s + (p.agente.saldoInicial || 0), 0);
   const inPos = hired.reduce((s, p) => s + Object.values(p.agente.posiciones || {}).reduce((x, q) => x + (q.importe || 0) + (q.pnlAbierto || 0), 0), 0);
@@ -376,7 +377,8 @@ function renderOffice() {
   setHTML($('officeSummary'),
     `<div class="stat"><div class="k">hired</div><div class="v">${hired.length}<small> / ${puestos.length}</small></div></div>` +
     `<div class="stat"><div class="k">equity (paper)</div><div class="v">${money(bal)}<small> · ${money(inPos)} in tokens</small></div></div>` +
-    `<div class="stat"><div class="k">P&amp;L</div><div class="v ${cls(pnl)}">${money(pnl)}<small> ${ini ? pct(pnl / ini * 100) : ''}</small></div></div>` +
+    `<div class="stat"><div class="k">P&amp;L (desks now)</div><div class="v ${cls(pnl)}">${money(pnl)}<small> ${ini ? pct(pnl / ini * 100) : ''}</small></div></div>` +
+    (libro ? `<div class="stat"><div class="k">ledger since ${new Date(libro.desde).toISOString().slice(5, 16).replace('T', ' ')} UTC</div><div class="v ${cls(libro.total)}">${money(libro.total)}<small> · ${libro.operaciones} trades, ${libro.rugs} rugs (${num(libro.rugsPorHora, 1)}/h), ${libro.despedidos} fired</small></div></div>` : '') +
     `<div class="stat"><div class="k">open · performing · probation</div><div class="v">${open}<small> · </small><span class="pos">${perf}</span><small> · </small><span style="color:var(--caution)">${prob}</span></div></div>`,
     'officeSummary');
   const r = d?.academia?.riesgo || {};
