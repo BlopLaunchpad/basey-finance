@@ -1,8 +1,10 @@
-/* LA ACADEMIA — the office floor. An isometric room drawn on a <canvas>, in the
- * flat-shaded Habbo style the owner approved for Arcopolis: ten desks with a
- * monitor each, a tea room, a whiteboard, a door, windows over a Wall Street
- * skyline. The hired agents walk around as pixel avatars with a deterministic
- * personality (from the genome and the record) and talk in speech bubbles.
+/* LA ACADEMIA · the trench — the office floor. An isometric room drawn on a
+ * <canvas>, in the flat-shaded Habbo style the owner approved for Arcopolis:
+ * ten desks with a monitor each, a tea room, a whiteboard, a door, windows over
+ * a night skyline. The hired memecoin traders walk around as pixel avatars with
+ * a deterministic personality (from the genome and the record) and talk in
+ * speech bubbles with the vocabulary of the trenches: rugs, snipers, bonding
+ * curves, graduations, wen moon.
  *
  * House rules kept here:
  *  - no libraries, no CDN, no build (ES module imported by academia.js);
@@ -34,8 +36,13 @@ function fillVars(t, vars) {
   return t.replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null && vars[k] !== '' ? String(vars[k]) : fallbackVar(k)));
 }
 function fallbackVar(k) {
-  return { coin: 'BTC', side: 'long', pct: '0.0%', n: '?', other: 'the neighbour', best: 'someone', stall: 'a few', gen: '?', lev: '1', ops: 'a few', velas: 'many', dia: '1', tipo: 'strategy', val: 'something', origin: 'unknown', titulo: 'something', genbest: '?' }[k] ?? '';
+  return { coin: 'the next launch', side: 'long', pct: '0%', n: '?', other: 'the neighbour', best: 'someone', stall: 'a few', gen: '?', lev: '1', ops: 'a few', velas: 'many', dia: '1', tipo: 'strategy', val: 'something', origin: 'unknown', titulo: 'something', genbest: '?', vivos: 'a few', x: '2', stop: '50', maxmin: '60', pad: 'any pad', muertos: '0', smart: '0', mcap: '$20k' }[k] ?? '';
 }
+
+/* the six ways a trench agent can pull the trigger, in English */
+export const DISPARO_LABEL = { flujo: 'flow reader', listos: 'copycat', momentum: 'chaser', holders: 'community believer', rebote: 'knife catcher', nacimiento: 'trench rat' };
+function disparoLabel(t) { return DISPARO_LABEL[t] || t || 'strategy'; }
+function isTrench(a) { return !!(a && a.g && a.g.disparo && a.g.filtros); }
 
 /* ── the look of an avatar: same palette/frame as avatarSVG in academia.js ── */
 const SKINS = ['#f1c9a5', '#e0ac7e', '#c68642', '#8d5524', '#f7dcc4', '#b97a56'];
@@ -77,21 +84,48 @@ export const TRAITS = {
   wellbred: { label: 'Well-bred', blurb: 'born by crossover of two parents and a tournament' },
   mutant: { label: 'Mutant', blurb: 'a mutation of one parent: like it, but different in the right places (hopefully)' },
   selfmade: { label: 'Self-made', blurb: 'born at random, zero mentors, zero parents' },
+  // the trench
+  flowreader: { label: 'Flow reader', blurb: 'buys where the net buyers pile in: more buys than sells in five minutes, nothing else matters' },
+  copycat: { label: 'Copycat', blurb: 'follows the watched wallets; if smart money buys, it buys a minute later' },
+  chaser: { label: 'Chaser', blurb: 'buys green candles that are already green; momentum first, questions later' },
+  believer: { label: 'Community believer', blurb: 'counts holders, not candles; a growing community is the whole thesis' },
+  knifecatcher: { label: 'Knife catcher', blurb: 'buys the first green minute after an hour of bleeding; sometimes it is a bounce, sometimes a rug' },
+  trenchrat: { label: 'Trench rat', blurb: 'lives in the first fifteen minutes of every launch; eats snipers for breakfast, gets eaten for lunch' },
+  diamondhands: { label: 'Diamond hands', blurb: 'wide stop: holds through the dip, and now and then into the rug' },
+  paperhands: { label: 'Paper hands', blurb: 'tight stop: out at the first red minute, keeps the losses small and the regrets many' },
+  greedy: { label: 'Greedy', blurb: 'wants a big multiple before selling; wen moon is a target, not a question' },
+  scalper: { label: 'Scalper', blurb: 'minutes inside, not hours; takes the quick x and leaves' },
+  paranoid: { label: 'Paranoid', blurb: 'only touches tokens that pass the safety check: no mint authority, no freeze, no tax, not rugged' },
+  pumpmaxi: { label: 'Pump maxi', blurb: 'only buys on the bonding curve of pump.fun; graduation is the dream' },
+  poolborn: { label: 'Pool purist', blurb: 'only tokens born straight in a pool, no launchpad; thinks curves are for tourists' },
 };
 export function personalidad(a) {
   if (!a) return [];
   const g = a.g || {}; const e = g.entrada || {}; const r = g.riesgo || {}; const t = a.entreno || {};
   const keys = [];
-  const TYPE = { fibonacci: 'mystic', ruptura: 'impulsive', cruceEma: 'methodical', rsi: 'contrarian' };
-  if (TYPE[e.tipo]) keys.push(TYPE[e.tipo]);
-  const lev = r.apalancamiento || 1;
-  if (lev >= 8) keys.push('reckless'); else if (lev <= 2) keys.push('cautious');
   const estado = a.estado || (a.despedido ? 'despedido' : null);
-  if (estado === 'observacion') keys.push('nervous'); else if (estado === 'cumple') keys.push('confident'); else if (estado === 'despedido') keys.push('bitter');
-  const rate = t.velas ? (t.operaciones || 0) / t.velas * 100 : null;
-  if (rate != null && rate >= 1.5) keys.push('hyperactive'); else if (rate != null && rate < 0.4) keys.push('patient');
-  const lado = g.lado;
-  if (lado === 'corto' || lado === 'short') keys.push('pessimist'); else if (lado === 'largo' || lado === 'long') keys.push('optimist');
+  if (isTrench(a)) {
+    const TYPE = { flujo: 'flowreader', listos: 'copycat', momentum: 'chaser', holders: 'believer', rebote: 'knifecatcher', nacimiento: 'trenchrat' };
+    if (TYPE[g.disparo.tipo]) keys.push(TYPE[g.disparo.tipo]);
+    const s = g.salida || {}, f = g.filtros || {};
+    if (s.stopPct >= 55) keys.push('diamondhands'); else if (s.stopPct <= 20) keys.push('paperhands');
+    if (estado === 'observacion') keys.push('nervous'); else if (estado === 'cumple') keys.push('confident'); else if (estado === 'despedido') keys.push('bitter');
+    if (s.objetivoX >= 4) keys.push('greedy'); else if (s.maxMin <= 15) keys.push('scalper');
+    if (f.requiereSegura) keys.push('paranoid');
+    if (f.pad === 'pump.fun') keys.push('pumpmaxi'); else if (f.pad === 'sin pad') keys.push('poolborn');
+    const rate = t.operaciones;
+    if (rate != null && rate >= 40) keys.push('hyperactive'); else if (rate != null && rate > 0 && rate < 5) keys.push('patient');
+  } else {
+    const TYPE = { fibonacci: 'mystic', ruptura: 'impulsive', cruceEma: 'methodical', rsi: 'contrarian' };
+    if (TYPE[e.tipo]) keys.push(TYPE[e.tipo]);
+    const lev = r.apalancamiento || 1;
+    if (lev >= 8) keys.push('reckless'); else if (lev <= 2) keys.push('cautious');
+    if (estado === 'observacion') keys.push('nervous'); else if (estado === 'cumple') keys.push('confident'); else if (estado === 'despedido') keys.push('bitter');
+    const rate = t.velas ? (t.operaciones || 0) / t.velas * 100 : null;
+    if (rate != null && rate >= 1.5) keys.push('hyperactive'); else if (rate != null && rate < 0.4) keys.push('patient');
+    const lado = g.lado;
+    if (lado === 'corto' || lado === 'short') keys.push('pessimist'); else if (lado === 'largo' || lado === 'long') keys.push('optimist');
+  }
   const origin = a.origen || g.origen;
   if (origin === 'cruce') keys.push('wellbred'); else if (origin === 'mutacion') keys.push('mutant'); else if (origin === 'aleatorio') keys.push('selfmade');
   // 3 at most, in that priority; if we only have 2, the origin one gets in
@@ -105,13 +139,6 @@ export function habilidades(a) {
   if (!a) return [];
   const g = a.g || {}; const s = g.salida || {}; const r = g.riesgo || {};
   const v = a.validacion || {}, t = a.entreno || {};
-  const maxVelas = s.maxVelas ?? 0;
-  const patience = clamp(maxVelas / 200, 0, 1) * 100;
-  const lev = r.apalancamiento || 1, frac = r.fraccion || 0;
-  const aggression = Math.sqrt(clamp(lev * frac / 4, 0, 1)) * 100;
-  const precision = v.aciertoPct ?? t.aciertoPct ?? null;
-  const stop = s.stopAtr ?? null;
-  const discipline = stop == null ? null : (1 - clamp((stop - 0.5) / 4.5, 0, 1)) * 100;
   let consistency = null, consHint;
   const win = a.ventanas || t.ventanas || v.ventanas;
   if (Array.isArray(win) && win.length > 1 && win.every((x) => typeof x === 'number' || typeof x?.puntuacion === 'number')) {
@@ -125,6 +152,34 @@ export function habilidades(a) {
     consistency = clamp(1 - diff / Math.max(5, Math.abs(t.netoPct) + Math.abs(v.netoPct)), 0, 1) * 100;
     consHint = `training ${t.netoPct.toFixed(1)}% vs validation ${v.netoPct.toFixed(1)}% (no window data from the engine)`;
   }
+  if (isTrench(a)) {
+    const m = v.operaciones ? v : t;                 // measured on validation when it traded there
+    const where = v.operaciones ? 'validation' : 'training';
+    const patience = clamp((s.maxMin || 0) / 720, 0, 1) * 100;
+    const greed = clamp(((s.objetivoX || 1.15) - 1.15) / (6 - 1.15), 0, 1) * 100;
+    const precision = m.operaciones ? m.aciertoPct : null;
+    const discipline = (1 - clamp(((s.stopPct ?? 70) - 10) / 60, 0, 1)) * 100;
+    const rugDodge = m.operaciones ? (1 - clamp((m.muertos || 0) / m.operaciones, 0, 1)) * 100 : null;
+    const f = g.filtros || {};
+    const nFilters = [f.holdersMin > 0, f.organicoMin > 0, f.top10Max < 100, f.requiereSegura, f.lpLockedMin > 0, f.devMintsMax < 200, f.snipersMax < 30, f.pad !== 'cualquiera', f.soloGraduados, f.soloConMarketing].filter(Boolean).length;
+    const paranoia = clamp(nFilters / 7, 0, 1) * 100;
+    return [
+      { key: 'patience', label: 'Patience', v: patience, hint: `holds up to ${s.maxMin ?? '?'} min inside a token` },
+      { key: 'greed', label: 'Greed', v: greed, hint: `sells at ×${s.objetivoX ?? '?'}` + (s.trailingPct ? ` · trailing ${s.trailingPct}%` : '') },
+      { key: 'precision', label: 'Precision', v: precision, hint: precision == null ? 'no trades measured yet' : `${precision.toFixed(1)}% winners in ${where}` },
+      { key: 'discipline', label: 'Discipline', v: discipline, hint: `stop at −${s.stopPct ?? '?'}% (tighter stop = more discipline)` },
+      { key: 'rugdodge', label: 'Rug dodging', v: rugDodge, hint: rugDodge == null ? 'no trades measured yet' : `${m.muertos || 0} of ${m.operaciones} trades went to zero in ${where}` },
+      { key: 'paranoia', label: 'Paranoia', v: paranoia, hint: `${nFilters} safety / quality filter${nFilters === 1 ? '' : 's'} on before it even looks at the trigger` },
+      { key: 'consistency', label: 'Consistency', v: consistency, hint: consHint || 'not measurable yet' },
+    ];
+  }
+  const maxVelas = s.maxVelas ?? 0;
+  const patience = clamp(maxVelas / 200, 0, 1) * 100;
+  const lev = r.apalancamiento || 1, frac = r.fraccion || 0;
+  const aggression = Math.sqrt(clamp(lev * frac / 4, 0, 1)) * 100;
+  const precision = v.aciertoPct ?? t.aciertoPct ?? null;
+  const stop = s.stopAtr ?? null;
+  const discipline = stop == null ? null : (1 - clamp((stop - 0.5) / 4.5, 0, 1)) * 100;
   return [
     { key: 'patience', label: 'Patience', v: patience, hint: `holds up to ${maxVelas} candles` },
     { key: 'aggression', label: 'Aggressiveness', v: aggression, hint: `${lev}× leverage · ${Math.round(frac * 100)}% of the balance per trade` },
@@ -137,78 +192,95 @@ export function habilidades(a) {
 /* ── what they say: generic lines per situation + trait flavour ────────── */
 const PHRASES = {
   idle: [
-    'Waiting for the setup. Patience is a position too.',
-    'Refreshing the chart like it owes me money.',
-    'Flat and proud. Flat is a trade.',
-    'Staring at {coin} until it blinks first.',
-    'No signal yet. The market is thinking.',
-    'Candle closed. Nothing. Next candle. Nothing. Love this job.',
-    'Paper money, real feelings.',
+    'Scanning {vivos} live tokens. None of them deserves me yet.',
+    'Refreshing the trench like it owes me SOL.',
+    'Flat and proud. Flat is the only position that never rugs.',
+    'Staring at {coin} until it graduates or dies.',
+    'No trigger yet. The trench is thinking. Loudly.',
+    'New launch. Rug. New launch. Rug. Love this job.',
+    'Paper SOL, real feelings.',
+    '{vivos} tokens alive right now. Statistically, {vivos} rugs tomorrow.',
+    'Wen moon? Wen filters pass, that is wen.',
   ],
   probation: [
-    'Day {dia} of probation. The chair feels colder.',
-    'Council at midnight. I have prepared a speech.',
-    'Net zero is a number too. Technically.',
-    "I'd trade more if the candles would cooperate.",
-    'Keeping my drawdown under 10 %. Keeping my hopes under 5 %.',
+    'Day {dia} of probation. The chair feels colder than a dead pool.',
+    'Council at midnight. I have prepared a speech about rugs.',
+    'Net zero is a number too. Technically. Please.',
+    "I'd trade more if the launches would stop rugging.",
+    'Keeping my drawdown under 25 %. Keeping my hopes under 5 %.',
     "Please don't look at my equity curve. It's shy.",
-    'Validation said {val}. The council wants more.',
+    'Validation said {val}. The council wants more than that.',
+    'Three trades to be judged. I have {ops}. Math is cruel.',
   ],
   performing: [
-    "Green on the board. Don't jinx it.",
-    'I told you the {tipo} works.',
-    'Performing. Underline it in the minutes.',
-    'Still employed. Round of coffee on me (paper).',
+    "Green on the board. Don't jinx it, the trench hears everything.",
+    'I told you the {tipo} works. Sometimes. Often enough.',
+    'Performing. Underline it in the minutes, in green.',
+    'Still employed. Round of paper coffee on me.',
     'My equity curve has a nice slope. I combed it.',
+    'Rugs: {muertos}. Winners: more. That is the whole job.',
   ],
   holding: [
-    '{coin} {side} and holding. Breathing optional.',
-    'Trailing stop moved. Trailing nerves too.',
-    'Green is nice. Closed green is nicer.',
-    'Watching {coin}. {coin} is watching me.',
-    'Funding tick. There goes my lunch.',
+    'Holding {coin}. Breathing optional, trailing stop mandatory.',
+    'In {coin} at {mcap}. Wen ×{x}?',
+    'Green is nice. Sold green is nicer. Rug is also a colour.',
+    'Watching {coin}. {coin} is watching the dev wallet.',
+    'If the liquidity moves, I move faster. Hopefully.',
+    '{coin}: {smart} smart wallets inside with me. Company at last.',
+    'Max {maxmin} minutes in {coin}. Then I leave, moon or no moon.',
   ],
   open: [
-    'Opened {side} {coin}. Hold my tea.',
-    '{side} on {coin}. Stop is set. Nerves are not.',
-    'Entry filled. Now we wait like professionals.',
-    "In. {coin} {side}. The candle closed, I didn't blink.",
+    'Bought {coin} at {mcap}. Hold my tea.',
+    'In on {coin}. Stop at −{stop} %. Nerves at −100 %.',
+    'Entry filled on {coin}. Now we wait like degens, professionally.',
+    "{coin}, $10, {tipo}. The trigger fired, I didn't blink.",
+    'Aped {coin}. Small. Paper. Still shaking.',
   ],
   win: [
-    '{coin} paid. Add it to the whiteboard.',
-    'Took profit on {coin}. Fees took their cut too.',
-    "Target hit. I'm basically a fund now.",
+    '{coin} paid. Add it to the whiteboard before it rugs.',
+    'Took profit on {coin}. The curve took its 1 % too.',
+    "Target hit on {coin}. I'm basically a fund now.",
     '{pct} on {coin}. The council will hear about this.',
+    '{coin} did a {pct}. Sold. Never look back at a chart you left.',
   ],
   loss: [
     'Stopped out on {coin}. It was a good stop though.',
-    '{coin} disagreed. Loudly.',
+    '{coin} disagreed. Loudly. With sell walls.',
     "Small loss. The plan survives. My pride doesn't.",
-    '{pct} on {coin}. I blame funding.',
-    'That stop was tight for a reason. Reason noted.',
+    '{pct} on {coin}. I blame the snipers.',
+    'That stop was tight for a reason. Reason noted on {coin}.',
+    '{coin}: the smart money left and so did I. Late.',
+  ],
+  rug: [
+    '{coin} rugged. The liquidity is gone. So is my $10.',
+    'Dev pulled the pool on {coin}. Classic. Logged as −100 %.',
+    "☠ {coin}. That's a rug. I'm fine. I'm not fine.",
+    '{coin} went to zero while I was blinking. Noted: blink less.',
+    'Mint authority was revoked. The dev was not. {coin}, rugged.',
   ],
   tea: [
-    'The kettle is the only thing here with a stable yield.',
-    'Tea first, Fibonacci later.',
-    'Who left the mug with the chart on it?',
-    "Markets don't close. Tea breaks do.",
-    'Discussing {coin} with the sofa. The sofa is bullish.',
-    'Milk, no sugar, 0.02 % slippage.',
+    'The kettle is the only thing here that never rugs.',
+    'Tea first, trench later.',
+    'Who left the mug with the pump.fun logo on it?',
+    "Launches don't stop. Tea breaks do.",
+    'Discussing {coin} with the sofa. The sofa says it rugs at 2 am.',
+    'Milk, no sugar, 1 % curve fee.',
     'This biscuit has a better drawdown than desk {n}.',
+    'Sipping. {vivos} tokens alive. None of them is my problem for five minutes.',
   ],
   visit: [
-    'Just checking what desk {n} is doing. Not copying.',
+    'Just checking what desk {n} is doing. Not copying. Copycatting.',
     'Nice equity curve, {other}. Did you draw it yourself?',
-    '{other}, is that leverage or a cry for help?',
+    '{other}, is that a stop at −{stop} % or a cry for help?',
     'So this is where the green candles live.',
-    'Borrowing a pen. And maybe a strategy.',
+    'Borrowing a pen. And maybe a filter.',
     "{other}'s stop is wider than my patience.",
+    '{other}, which pad do you watch? Asking for a mutation.',
   ],
   news: [
-    'Breaking news. Breaking my stop too, probably.',
+    'Something on the wire. Probably a rug with a press release.',
     "'{titulo}' — noted, ignored, re-noted.",
-    'News just hit. My genome says: wait a candle.',
-    'Headline on the wire. The fast desk is twitching.',
+    'News just hit. My genome says: check the liquidity first.',
   ],
   stall: [
     '{stall} generations without a record. The hall is napping.',
@@ -219,19 +291,20 @@ const PHRASES = {
   record: [
     'New best validated: {best}. Show-off.',
     "{best} just set a record. I'm happy. Visibly.",
-    "Record on the board. Someone check it's not overfit.",
+    "Record on the board. Someone check it's not overfit to one pump.",
   ],
   hired: [
-    "First day. Where's the coffee? Where's the stop?",
+    "First day. Where's the coffee? Where's the rug check?",
     'Hired at desk {n}. Validation said I was worth {val}.',
-    'Reporting for duty. Born by {origin}.',
-    'New desk, new me. Same genome.',
+    'Reporting for duty. Born by {origin}. Raised in the trenches.',
+    'New desk, new me. Same genome, same stop at −{stop} %.',
   ],
   fired: [
     'Fired. Tell my children I had a good drawdown.',
     "They said drawdown. I heard 'character'.",
     'Clearing my desk. Keeping the mug.',
     'Back to the hall. Mutation, here I come.',
+    'Rugged by the council. At least they left the liquidity.',
   ],
   council: [
     'Council time. Act natural, equity curve.',
@@ -240,12 +313,12 @@ const PHRASES = {
     'Three rules, zero mercy. Love the transparency.',
   ],
   waiting: [
-    'Nothing to trade until the {close} candle closes.',
-    'Next {iv} candle closes at {close} UTC. Until then: tea.',
-    'Signals only on the close. {close} UTC, then we talk.',
-    'Hired {ago}. Waiting for the {close} close. Not lazy, methodical.',
-    'No entry without a closed {iv} candle. Rules are rules.',
-    '{close} UTC. That is when the chart is allowed to speak.',
+    'Scanning {vivos} live tokens. Nothing passes my filters yet.',
+    '{vivos} tokens alive and not one {tipo} setup. Picky, not lazy.',
+    'Hired {ago}. The trigger has not fired once. Rules are rules.',
+    'I only buy on {pad}. Patience is a filter too.',
+    'Waiting for ≥ {smartmin} smart wallets to move. Nothing yet.',
+    'Every minute a new photo of every token. Still nothing worth $10.',
   ],
   offline: ['The engine is off. We are all on tea break.'],
 };
@@ -335,13 +408,97 @@ const TRAIT_PHRASES = {
     idle: ['Performing. Say it with me.'],
     visit: ['Need a hand, desk {n}? I have two. Both green.'],
   },
-  bitter: { fired: ['The fees ate me. Put that on the plaque.'], idle: ['Fired, not forgotten.'] },
+  bitter: { fired: ['The rugs ate me. Put that on the plaque.'], idle: ['Fired, not forgotten.'] },
   wellbred: {
     hired: ['Child of two parents and a tournament. Genetics, baby.'],
     idle: ['My parents never agreed on stops either.'],
   },
   mutant: { idle: ['My parent was like me, but worse. Evolution.'], hired: ['One parent, a few mutations, a desk. Not bad.'] },
   selfmade: { idle: ['Random seed, zero mentors. Self-made agent.'], hired: ['Nobody taught me. It shows. In a good way.'] },
+  /* the trench */
+  flowreader: {
+    idle: ['Buyers minus sellers. That is the whole chart.', 'I read flow, not candles. Candles lie, wallets pay.'],
+    open: ['Net buyers piling in on {coin}. I follow the crowd, early.'],
+    loss: ['The flow flipped on {coin}. Sellers are buyers who learned.'],
+    win: ['Flow said buy, flow said sell. {coin} paid the toll.'],
+    tea: ['Counting the tea buyers. Net positive. Bullish kettle.'],
+  },
+  copycat: {
+    idle: ['Smart wallets quiet. I am quiet. We are all quiet.', '{smart} watched wallets moving. I move with them.'],
+    open: ['Smart money bought {coin}. I bought a minute later. Copycat with pride.'],
+    loss: ['The smart money left {coin} before me. Not that smart to follow.'],
+    win: ['Followed the whales into {coin}. Followed them out. Easy.'],
+    visit: ['{other}, who are you copying? I am copying you copying.'],
+  },
+  chaser: {
+    idle: ['Green candle? GREEN CANDLE? No. Fine. Next.', 'A +{dpct} % minute is a door. I kick doors.'],
+    open: ['{coin} is already up. That is why I buy. Momentum, baby.'],
+    loss: ['Chased {coin}. {coin} was faster.'],
+    win: ['Chased, caught, sold. {coin} never saw me coming.'],
+    tea: ['Quick tea. Something is pumping.'],
+  },
+  believer: {
+    idle: ['Holders up, I am in. Holders down, I was never here.', 'Community is the chart. Everything else is noise.'],
+    open: ['{coin} gained holders. A community is forming. I join communities.'],
+    loss: ['The community of {coin} was 40 wallets and a dev.'],
+    win: ['Holders grew, price followed. {coin} believers paid.'],
+    tea: ['The tea room is a community too. Bullish.'],
+  },
+  knifecatcher: {
+    idle: ['Down 60 % in an hour? Now you have my attention.', 'The first green minute after the bleeding. That is my moment.'],
+    open: ['Caught the knife on {coin}. Fingers still attached.'],
+    loss: ['The knife on {coin} had a second blade.'],
+    win: ['Bounce caught on {coin}. The floor was real this time.'],
+    rug: ['It was not a dip. {coin} was the exit liquidity. Mine.'],
+    tea: ['Burnt my tongue. Still a better entry than yesterday.'],
+  },
+  trenchrat: {
+    idle: ['Fifteen minutes old or nothing. I live in the trench.', 'Fresh launch, {snipers} snipers. Let them sell first.'],
+    open: ['{coin} is {age} old. Perfect. In before the snipers dump.'],
+    loss: ['{coin} rugged at minute nine. The trench giveth.'],
+    win: ['Newborn {coin} did a ×{x}. The trench taketh, sometimes it giveth.'],
+    rug: ['Minute 4: rug. Of course. Next launch is in 20 seconds.'],
+    hired: ['Fresh from the trench. The dirt is part of the uniform.'],
+  },
+  diamondhands: {
+    idle: ['Stop at −{stop} %. I do not sell the dip. I am the dip.'],
+    holding: ['Down 40 % on {coin}. Diamond hands. Paper lungs.'],
+    loss: ['−{stop} % hit on {coin}. That was my whole thesis.'],
+    tea: ['Holding this tea since 9 am. Diamond hands.'],
+  },
+  paperhands: {
+    idle: ['First red minute and I am out. Not scared. Efficient.'],
+    open: ['In {coin}. Stop at −{stop} %. One wobble and I leave.'],
+    loss: ['Out of {coin} at −{stop} %. Small loss, big relief.'],
+    tea: ['This tea is too hot. Sold it.'],
+  },
+  greedy: {
+    idle: ['×{x} or nothing. Mostly nothing.'],
+    holding: ['{coin} at ×2. My target is ×{x}. Wen moon.'],
+    win: ['×{x} on {coin}. Told you. Greed is a strategy.'],
+    tea: ['Two biscuits. Target was three.'],
+  },
+  scalper: {
+    idle: ['{maxmin} minutes max per token. In, out, next.'],
+    open: ['Bought {coin}. Timer set: {maxmin} minutes.'],
+    win: ['Quick ×{x} on {coin} and out. That is a scalp.'],
+    tea: ['Thirty-second tea. Scalping the kettle.'],
+  },
+  paranoid: {
+    idle: ['Mint authority? Freeze? Tax? Hook? No? Fine, maybe.', 'Safe only. I have read the RugCheck. All of it.'],
+    open: ['{coin} passed the safety check. Still checking.'],
+    rug: ['{coin} passed every check and rugged anyway. Paranoia upgraded.'],
+    tea: ['Checked the tea for freeze authority.'],
+  },
+  pumpmaxi: {
+    idle: ['pump.fun only. The curve is my home.', 'Wen graduation? Wen my filters say so.'],
+    open: ['On the curve with {coin}. 1 % fee, 100 % hope.'],
+    win: ['{coin} graduated and I was there. Proud parent.'],
+  },
+  poolborn: {
+    idle: ['No pad, no curve, born in a pool. Like a real token.'],
+    open: ['{coin} was born straight in a pool. No tourists. In.'],
+  },
 };
 export function frase(ag, situation, vars, key) {
   const pool = [...(PHRASES[situation] || PHRASES.idle)];
@@ -359,11 +516,14 @@ export function fichaExtraHTML(a, data, nameOf) {
   const traits = personalidad(a);
   const skills = habilidades(a);
   const g = a.g || {};
-  const entryLabel = { fibonacci: 'Fibonacci', ruptura: 'breakout', cruceEma: 'EMA cross', rsi: 'RSI' }[g.entrada?.tipo] || 'strategy';
+  const entryLabel = isTrench(a) ? disparoLabel(g.disparo.tipo) : ({ fibonacci: 'Fibonacci', ruptura: 'breakout', cruceEma: 'EMA cross', rsi: 'RSI' }[g.entrada?.tipo] || 'strategy');
   const ag = { id: a.id, traits };
+  const pos = Object.values(a.posiciones || {});
   const vars = {
-    coin: (g.mercados || [])[0], lev: g.riesgo?.apalancamiento, ops: a.entreno?.operaciones, velas: a.entreno?.velas, tipo: entryLabel,
+    coin: pos[0]?.simbolo || (a.operaciones || [])[0]?.simbolo || (g.mercados || [])[0], lev: g.riesgo?.apalancamiento, ops: a.entreno?.operaciones, velas: a.entreno?.velas, tipo: entryLabel,
     n: a.puesto ?? '?', dia: a.diasObservacion || 1, val: a.validacion?.netoPct != null ? a.validacion.netoPct.toFixed(2) + '%' : null,
+    x: g.salida?.objetivoX, stop: g.salida?.stopPct, maxmin: g.salida?.maxMin, pad: padLabel(g.filtros?.pad), muertos: a.validacion?.muertos ?? a.entreno?.muertos ?? 0,
+    smart: pos[0]?.listosAlEntrar ?? 0, smartmin: g.disparo?.listos10Min, vivos: data?.trinchera?.vivos ?? data?.academia?.tokensVivos, dpct: g.disparo?.dPrecio5Min, snipers: g.filtros?.snipersMax,
   };
   const voice = frase(ag, a.estado === 'observacion' ? 'probation' : a.estado === 'cumple' ? 'performing' : 'idle', vars, 'file');
   let html = `<div><h4>Personality</h4><div class="traits">` +
@@ -557,7 +717,7 @@ function buildStatic() {
     ctx.fillStyle = '#5a4a2e'; ctx.fillRect(0, top, w, h);
     ctx.fillStyle = '#c9a44a'; ctx.fillRect(2, top + 2, w - 4, h - 4);
     ctx.fillStyle = '#3a2c12'; ctx.font = `700 ${Math.max(5, G.tw * .09)}px ${monoFont()}`; ctx.textAlign = 'center';
-    ctx.fillText('FEES EAT', w / 2, top + h * .45); ctx.fillText('EVERYONE', w / 2, top + h * .85); ctx.textAlign = 'left';
+    ctx.fillText('RUGS EAT', w / 2, top + h * .45); ctx.fillText('EVERYONE', w / 2, top + h * .85); ctx.textAlign = 'left';
   });
   // ── left wall decor ──
   // two framed charts (bull, bear)
@@ -632,12 +792,17 @@ function drawClock(ctx, now) {
 }
 function drawLed(ctx, now) {
   const G = R.G; const u = G.tw / 2; const d = R.data;
-  const coins = new Set();
-  for (const p of d?.academia?.puestos || []) if (p.agente) for (const c of p.agente.g?.mercados || []) coins.add(c);
-  const pr = d?.precios || {};
   let text = '';
-  for (const c of coins) if (pr[c] != null) text += `${c} ${fmtPrice(pr[c])}   `;
-  if (!text) text = d ? 'LA ACADEMIA · ten desks · the fees eat almost everyone   ' : 'ENGINE OFFLINE   ';
+  const tr = d?.trinchera;
+  if (tr) {
+    text += `THE TRENCH · ${tr.vivos ?? 0} LIVE · ${tr.hoy ?? 0} TODAY   `;
+    for (const [p, n] of Object.entries(tr.porPad || {}).sort((a, b) => b[1] - a[1]).slice(0, 5)) text += `${padLabel(p).toUpperCase()} ${n}   `;
+    for (const row of (tr.calientes || []).slice(0, 4)) text += `${row.simbolo || '?'} ${row.netos5 > 0 ? '+' : ''}${row.netos5} NET ${fmtUsd(row.mcap)}   `;
+  } else {
+    // open positions of the desks, as a fallback ticker
+    for (const p of d?.academia?.puestos || []) if (p.agente) for (const q of Object.values(p.agente.posiciones || {})) text += `${q.simbolo || '?'} ${(q.pnlAbierto || 0) >= 0 ? '+' : ''}${(q.pnlAbierto || 0).toFixed(2)}$   `;
+  }
+  if (!text) text = d ? 'LA ACADEMIA · THE TRENCH · ten desks · the rugs eat almost everyone   ' : 'ENGINE OFFLINE   ';
   text += `GEN ${d?.evolucion?.generacion ?? '—'}   `;
   onBackWall(ctx, .2, () => {
     const len = (COLS - .4) * u, h = Math.max(7, G.tw * .17), top = -G.wh * .985;
@@ -656,6 +821,14 @@ function fmtPrice(p) {
   if (p >= 0.01) return p.toFixed(4);
   return p.toFixed(6);
 }
+function fmtUsd(n) {
+  if (n == null || !isFinite(n)) return '—';
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return '$' + Math.round(n / 1e3) + 'k';
+  return '$' + Math.round(n);
+}
+const PAD_LABEL = { 'sin pad': 'no pad', cualquiera: 'any pad', 'pump.fun': 'pump.fun', launchlab: 'LaunchLab', 'met-dbc': 'Meteora DBC', stonkfun: 'stonk.fun' };
+function padLabel(p) { return PAD_LABEL[p] || p || 'no pad'; }
 
 /* ── furniture ──────────────────────────────────────────── */
 function drawDesk(ctx, desk, now) {
@@ -935,18 +1108,27 @@ function arrived(ag) {
 function firstName(n) { return String(n || '').split(' ')[0]; }
 function vars(ag) {
   const a = ag.data || {}; const g = a.g || {};
-  const pos = Object.keys(a.posiciones || {});
-  const coin = pos[0] || (g.mercados || [])[0];
-  const side = pos[0] ? (/corto|short/.test(a.posiciones[pos[0]].lado) ? 'short' : 'long') : (g.lado === 'corto' ? 'short' : 'long');
-  const entryLabel = { fibonacci: 'Fibonacci', ruptura: 'breakout', cruceEma: 'EMA cross', rsi: 'RSI' }[g.entrada?.tipo] || 'strategy';
+  const posList = Object.values(a.posiciones || {});
+  const trench = isTrench(a);
+  // the most recent position (or the last trade) gives the token the agent talks about
+  const cur = posList.slice().sort((x, y) => (y.t || 0) - (x.t || 0))[0];
+  const last = (a.operaciones || [])[0];
+  const coin = trench ? (cur?.simbolo || last?.simbolo || null) : (Object.keys(a.posiciones || {})[0] || (g.mercados || [])[0]);
+  const side = !trench && cur ? (/corto|short/.test(cur.lado) ? 'short' : 'long') : (g.lado === 'corto' ? 'short' : 'long');
+  const entryLabel = trench ? disparoLabel(g.disparo.tipo) : ({ fibonacci: 'Fibonacci', ruptura: 'breakout', cruceEma: 'EMA cross', rsi: 'RSI' }[g.entrada?.tipo] || 'strategy');
   const ev = R.data?.evolucion;
   const nc = nextCandleClose(g.intervalo);
+  const tr = R.data?.trinchera;
   return {
     close: nc.label, iv: g.intervalo || '1h', ago: agoShort(a.contratado),
     coin, side, n: ag.deskN, lev: g.riesgo?.apalancamiento, ops: a.entreno?.operaciones, velas: a.entreno?.velas, tipo: entryLabel,
     dia: a.diasObservacion || 1, val: a.validacion?.netoPct != null ? a.validacion.netoPct.toFixed(2) + '%' : null,
     origin: a.origen === 'cruce' ? 'crossover' : a.origen === 'mutacion' ? 'mutation' : a.origen === 'aleatorio' ? 'chance' : a.origen,
     best: ev?.mejorValidado?.nombre, stall: ev?.estancado, gen: ev?.generacion, genbest: ev && ev.generacion != null && ev.estancado != null ? ev.generacion - ev.estancado : null,
+    // the trench
+    vivos: tr?.vivos ?? R.data?.academia?.tokensVivos, x: g.salida?.objetivoX, stop: g.salida?.stopPct, maxmin: g.salida?.maxMin, pad: padLabel(g.filtros?.pad),
+    muertos: a.validacion?.muertos ?? a.entreno?.muertos ?? 0, smart: cur?.listosAlEntrar ?? 0, smartmin: g.disparo?.listos10Min, dpct: g.disparo?.dPrecio5Min,
+    snipers: g.filtros?.snipersMax, mcap: cur ? fmtUsd(cur.mcap) : null, age: cur ? Math.max(0, Math.round((Date.now() - cur.t) / 60000)) + ' min' : null,
   };
 }
 function say(ag, situation, v, k) {
@@ -1055,13 +1237,17 @@ function handleFeed(f, now) {
   const byId = f.id ? R.agents.get(f.id) : null;
   const byDesk = f.puesto ? deskAgent(f.puesto) : null;
   const ag = byId || byDesk;
-  const coin = f.coin || (f.texto || '').match(/\b([A-Z]{2,6})\b/)?.[1];
-  const pctM = (f.texto || '').match(/([+-]?\d+[.,]\d+)\s?%/);
+  const txt = f.texto || '';
+  // trench feed: "X buys SYM at mcap 12k (flujo, 10 $)" / "X sells SYM (muerto): -10.00 $ (-100 %)"; old feed: coins in caps
+  const coin = f.coin || txt.match(/\b(?:buys|sells)\s+(\S+)/)?.[1] || txt.match(/\b([A-Z]{2,6})\b/)?.[1];
+  const pctM = txt.match(/\(?([+-]?\d+(?:[.,]\d+)?)\s?%\)?/);
   const pct = pctM ? pctM[1].replace(',', '.') + '%' : null;
+  const mcapM = txt.match(/mcap\s+(\S+)/);
+  const extra = { coin, pct, mcap: mcapM ? '$' + mcapM[1] : null };
   switch (f.tipo) {
-    case 'apertura': if (ag) { say(ag, 'open', { ...vars(ag), coin }, f.t); R.blink.set(ag.deskN, now + 3000); } break;
-    case 'ganancia': if (ag) { say(ag, 'win', { ...vars(ag), coin, pct }, f.t); R.blink.set(ag.deskN, now + 3000); } break;
-    case 'perdida': if (ag) { say(ag, 'loss', { ...vars(ag), coin, pct }, f.t); R.blink.set(ag.deskN, now + 3000); } break;
+    case 'apertura': if (ag) { say(ag, 'open', { ...vars(ag), ...extra }, f.t); R.blink.set(ag.deskN, now + 3000); } break;
+    case 'ganancia': if (ag) { say(ag, 'win', { ...vars(ag), ...extra }, f.t); R.blink.set(ag.deskN, now + 3000); } break;
+    case 'perdida': if (ag) { say(ag, /\(muerto\)/.test(txt) ? 'rug' : 'loss', { ...vars(ag), ...extra }, f.t); R.blink.set(ag.deskN, now + 3000); } break;
     case 'contratacion': if (ag && !R.queue.some((q) => q.id === ag.id)) say(ag, 'hired', vars(ag), f.t); break;
     case 'consejo': for (let i = 0; i < Math.min(2, list.length); i++) { const a = list[(hash('council' + f.t) + i * 7) % list.length]; say(a, 'council', vars(a), f.t); } break;
     case 'record': R.whiteboardFlash = now + 3000; if (list.length) { const a = list[hash('rec' + f.t) % list.length]; say(a, 'record', vars(a), f.t); } break;

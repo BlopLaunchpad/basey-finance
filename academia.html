@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>La Academia</title>
+<title>La Academia · the trench</title>
 <!-- Private tool, same policy as the rest of basey.finance: out of search engines. -->
 <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
 <meta name="googlebot" content="noindex, nofollow">
-<link rel="stylesheet" href="academia.css?v=2">
+<link rel="stylesheet" href="academia.css?v=3">
 </head>
 <body>
 
@@ -16,14 +16,14 @@
     <div class="brand">
       <span class="mark"></span>
       <div>
-        <h1>La Academia</h1>
-        <small>agents learning to trade Hyperliquid · <a href="./">basey.finance</a></small>
+        <h1>La Academia <span class="h1-sub">· the trench</span></h1>
+        <small>agents learning to trade Solana memecoins · <a href="./">basey.finance</a></small>
       </div>
     </div>
     <div class="council-clock" id="clock" title="The council sits every day at 00:00 UTC">council in <b>--:--:--</b></div>
     <div class="status" id="status"><span class="dot"></span><span>connecting…</span></div>
   </div>
-  <div class="ticker"><div class="ticker-in" id="ticker"><span class="empty">prices…</span></div></div>
+  <div class="ticker"><div class="ticker-in" id="ticker"><span class="empty">the trench…</span></div></div>
 </header>
 
 <main>
@@ -37,25 +37,27 @@
           <span><i style="background:#3fbf7f"></i>performing</span>
           <span><i style="background:#d9a441"></i>probation</span>
           <span><i style="background:#e05260"></i>fired, walking out</span>
-          <span>screen: <b style="color:#3fbf7f">green</b> P&amp;L up · <b style="color:#e05260">red</b> down · blinks on open / close</span>
+          <span>screen: <b style="color:#3fbf7f">green</b> P&amp;L up · <b style="color:#e05260">red</b> down · blinks on a buy / sell</span>
           <span>tea room: on probation or nothing open</span>
         </div>
       </section>
 
       <section id="office">
         <h2>The Office <span class="sub" id="officeSub">10 desks</span></h2>
-        <p class="office-note">Desks trade only on candle closes (15m / 1h / 4h); first trades usually appear within hours of hiring. A desk with nothing open says below what it is waiting for.</p>
+        <p class="office-note" id="officeNote">Every desk scans every live token once a minute and buys $10 per token, at most 5 open at once, on a $100 paper balance. A token whose liquidity dies is a rug: the position goes to zero. A desk with nothing open says below what it is doing.</p>
         <div class="office-summary" id="officeSummary"></div>
         <div class="desks" id="desks"></div>
       </section>
 
-      <section id="newsroom">
-        <h2>Newsroom <span class="sub" id="newsSub">the fast desk</span></h2>
-        <div class="news-counters" id="newsCounters"></div>
-        <div class="news-grid">
-          <div class="card news-card"><h3>Latest events</h3><ul class="news-list" id="newsList"></ul></div>
-          <div class="card news-card"><h3>Funding · open interest <small id="fundingWhen"></small></h3><div id="funding"></div></div>
+      <section id="trench">
+        <h2>The Trench <span class="sub" id="trenchSub">what the desks are scanning right now</span></h2>
+        <div class="trench-counters" id="trenchCounters"></div>
+        <div class="trench-grid">
+          <div class="card trench-card"><h3>Just born <small id="bornSub">last hour</small></h3><div class="trows" id="trenchBorn"></div></div>
+          <div class="card trench-card"><h3>Hottest by net buyers <small id="hotSub">5 min</small></h3><div class="trows" id="trenchHot"></div></div>
+          <div class="card trench-card"><h3>Smart money buying <small id="smartSub">watched wallets, 10 min</small></h3><div class="trows" id="trenchSmart"></div></div>
         </div>
+        <p class="trench-note">Tap a token for its file: safety lights, first buyers and snipers, watched wallets that bought, and the price / mcap chart. <b>net</b> = buyers minus sellers in 5 min · <b>smart</b> = watched wallets buying in 10 min · <b>snipers</b> = wallets that bought within 2 s of the first buy · the dot is the safety check (green safe, red flagged, grey not checked yet).</p>
       </section>
 
       <section id="hall">
@@ -64,10 +66,12 @@
         <div class="hall-wrap" id="hallWrap">
           <canvas id="hallCanvas" height="200"></canvas>
           <div class="hall-legend" id="hallLegend">
-            <span><i class="circle"></i>EMA cross</span>
-            <span><i></i>RSI</span>
-            <span><i class="tri"></i>Breakout</span>
-            <span><i class="diamond"></i>Fibonacci</span>
+            <span><i class="circle"></i>flow reader</span>
+            <span><i></i>copycat</span>
+            <span><i class="tri"></i>chaser</span>
+            <span><i class="diamond"></i>community believer</span>
+            <span><i class="tri-down"></i>knife catcher</span>
+            <span><i class="star"></i>trench rat</span>
             <span><i class="ring"></i>sitting at a desk</span>
             <span>validation<span class="grad"></span>colour · training = size</span>
           </div>
@@ -124,9 +128,8 @@
 </main>
 
 <footer>
-  <p><b>Score</b> (training and validation alike):
-    <code>(min(net %, 200) − max drawdown %) × min(1, trades / 20) − 5 × liquidations − 10 if fewer than 5 trades</code></p>
-  <p><b>Simulated costs:</b> taker 0.045 % per side + 0.02 % slippage, funding 0.01 % / 8 h against the position, liquidation at 90 % of the isolated margin. Signals on the closed candle, entry at the next open. Nothing here promises profit: the fees eat almost everyone. This is an honest measure.</p>
+  <p><b>Score</b> (validation): <code>(min(net %, 300) − max drawdown %) × min(1, trades / 20) when positive − 10 if fewer than 5 trades</code>. The training score is the mean of that over 3 time windows minus half their spread: an agent has to win in every window, not once.</p>
+  <p><b>Simulated costs:</b> 1.1 % per side on the bonding curve, 0.5 % once graduated or born straight in a pool; slippage by x·y = k against half the pool's liquidity; $0.30 priority per side. A token that stops having liquidity above $1,000 is a rug and whatever is still inside is worth 0. Signals use only what was known at that minute. Nothing here promises profit: the rugs and the fees eat almost everyone. This is an honest measure.</p>
   <p id="footMeta"></p>
 </footer>
 
@@ -141,9 +144,13 @@
       <stop offset="0" stop-color="#5b8cff" stop-opacity=".35"/>
       <stop offset="1" stop-color="#5b8cff" stop-opacity="0"/>
     </linearGradient>
+    <linearGradient id="mcapFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8f6bff" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#8f6bff" stop-opacity="0"/>
+    </linearGradient>
   </defs>
 </svg>
 
-<script type="module" src="academia.js?v=2"></script>
+<script type="module" src="academia.js?v=3"></script>
 </body>
 </html>
