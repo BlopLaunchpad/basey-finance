@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La Academia</title>
+<!-- Private tool, same policy as the rest of basey.finance: out of search engines. -->
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<meta name="googlebot" content="noindex, nofollow">
+<link rel="stylesheet" href="academia.css?v=1">
+</head>
+<body>
+
+<header class="top">
+  <div class="top-row">
+    <div class="brand">
+      <span class="mark"></span>
+      <div>
+        <h1>La Academia</h1>
+        <small>agents learning to trade Hyperliquid · <a href="./">basey.finance</a></small>
+      </div>
+    </div>
+    <div class="council-clock" id="clock" title="The council sits every day at 00:00 UTC">council in <b>--:--:--</b></div>
+    <div class="status" id="status"><span class="dot"></span><span>connecting…</span></div>
+  </div>
+  <div class="ticker"><div class="ticker-in" id="ticker"><span class="empty">prices…</span></div></div>
+</header>
+
+<main>
+  <div class="cols">
+    <div class="col-main">
+
+      <section id="office">
+        <h2>The Office <span class="sub" id="officeSub">10 desks</span></h2>
+        <div class="office-summary" id="officeSummary"></div>
+        <div class="desks" id="desks"></div>
+      </section>
+
+      <section id="newsroom">
+        <h2>Newsroom <span class="sub" id="newsSub">the fast desk</span></h2>
+        <div class="news-counters" id="newsCounters"></div>
+        <div class="news-grid">
+          <div class="card news-card"><h3>Latest events</h3><ul class="news-list" id="newsList"></ul></div>
+          <div class="card news-card"><h3>Funding · open interest <small id="fundingWhen"></small></h3><div id="funding"></div></div>
+        </div>
+      </section>
+
+      <section id="hall">
+        <h2>The Hall <span class="sub" id="hallSub">the whole population</span></h2>
+        <div class="hall-stats" id="hallStats"></div>
+        <div class="hall-wrap" id="hallWrap">
+          <canvas id="hallCanvas" height="200"></canvas>
+          <div class="hall-legend" id="hallLegend">
+            <span><i class="circle"></i>EMA cross</span>
+            <span><i></i>RSI</span>
+            <span><i class="tri"></i>Breakout</span>
+            <span><i class="diamond"></i>Fibonacci</span>
+            <span><i class="ring"></i>sitting at a desk</span>
+            <span>validation<span class="grad"></span>colour · training = size</span>
+          </div>
+          <div class="chair-card" id="chairCard" hidden></div>
+        </div>
+        <div class="candidates" id="candidates"></div>
+        <div class="chart-wrap" id="historyWrap">
+          <svg id="history" viewBox="0 0 800 190" preserveAspectRatio="none"></svg>
+          <div class="chart-legend">
+            <span><i style="background:#5b8cff"></i>best training score</span>
+            <span><i style="background:#3fbf7f"></i>best validation score</span>
+            <span><i style="background:#97a1b0"></i>population mean</span>
+            <span><i style="background:#d9a441"></i>diversity (right axis, 0–1)</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="councilSec">
+        <h2>The Council <span class="sub" id="councilSub">daily at 00:00 UTC</span></h2>
+        <div class="council">
+          <div class="card">
+            <h3>Last session <small id="councilWhen"></small></h3>
+            <div id="councilBody"></div>
+            <div class="btn-row">
+              <button class="btn btn-primary" id="holdCouncil" type="button">Hold the council now</button>
+              <span class="hint" id="holdHint"></span>
+            </div>
+          </div>
+          <div class="card">
+            <h3>The rules</h3>
+            <ul class="rules" id="rules"></ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="others">
+        <h2>Fired · Requests · Supervisors</h2>
+        <div class="trio">
+          <div class="card"><h3>Fired <small id="firedCount"></small></h3><div id="fired"></div></div>
+          <div class="card"><h3>Requests <small id="reqCount"></small></h3><div id="requests"></div></div>
+          <div class="card"><h3>Supervisors <small id="supCount"></small></h3><div id="supervisors"></div></div>
+        </div>
+      </section>
+
+    </div>
+
+    <aside class="col-side">
+      <div class="feed">
+        <div class="feed-head"><b>Live feed</b><span class="pill dim" id="feedCount"></span></div>
+        <ul class="feed-list" id="feed"></ul>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<footer>
+  <p><b>Score</b> (training and validation alike):
+    <code>(min(net %, 200) − max drawdown %) × min(1, trades / 20) − 5 × liquidations − 10 if fewer than 5 trades</code></p>
+  <p><b>Simulated costs:</b> taker 0.045 % per side + 0.02 % slippage, funding 0.01 % / 8 h against the position, liquidation at 90 % of the isolated margin. Signals on the closed candle, entry at the next open. Nothing here promises profit: the fees eat almost everyone. This is an honest measure.</p>
+  <p id="footMeta"></p>
+</footer>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-box" id="modalBox" role="dialog" aria-modal="true"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b8cff" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#5b8cff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<script type="module" src="academia.js?v=1"></script>
+</body>
+</html>
