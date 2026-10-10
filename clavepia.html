@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- 10-oct-2026. Entrega cifrada de la clave de una wallet al droplet de la academia. La clave se cifra AQUI, en el navegador,
+     con la clave publica RSA-4096 del droplet (WebCrypto RSA-OAEP SHA-256) y solo viaja el cifrado; solo el droplet puede
+     abrirlo. Esta pagina no carga nada de fuera y solo puede hablar con trinchera.oligarc.xyz. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src https://trinchera.oligarc.xyz; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Key drop · basey</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b0d10; --surface:#14181d; --line:#262d36; --text:#e6e9ee; --dim:#97a1b0; --accent:#5b8cff; --safe:#3fbf7f; --danger:#e2703a; }
+  body { margin:0; background:var(--bg); color:var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 22px; margin: 0 0 6px; } p { color: var(--dim); }
+  textarea, input { width: 100%; box-sizing: border-box; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: 14px ui-monospace, Consolas, monospace; }
+  textarea { min-height: 110px; resize: vertical; }
+  .btn { display:inline-block; margin-top: 12px; background: var(--accent); color: #0a0f1c; border: 0; border-radius: 10px; padding: 12px 18px; font-weight: 700; cursor: pointer; }
+  .btn[disabled] { opacity: .5; cursor: default; }
+  .msg { margin-top: 14px; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); word-break: break-all; }
+  .ok { border-color: var(--safe); } .bad { border-color: var(--danger); }
+  small { color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Key drop for a desk wallet</h1>
+  <p>Paste the private key of the NEW wallet (base58 as exported by Phantom/Backpack, or the JSON array). It is encrypted in this browser with the academy server's RSA-4096 public key and only the ciphertext is sent. Nothing is stored here.</p>
+  <label for="nombre"><small>Desk (lowercase, e.g. <code>pia</code>)</small></label>
+  <input id="nombre" value="pia" autocomplete="off" spellcheck="false">
+  <label for="clave" style="display:block;margin-top:12px"><small>Private key</small></label>
+  <textarea id="clave" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"></textarea>
+  <button class="btn" id="enviar" type="button">Encrypt and send</button>
+  <div class="msg" id="estado" hidden></div>
+  <p><small>If the send fails (DNS not ready), the encrypted text is shown below so you can paste it in the chat: it is useless to anyone without the server's private key.</small></p>
+  <textarea id="cifrado" readonly hidden></textarea>
+</main>
+<script>
+const PUB = `-----BEGIN PUBLIC KEY-----
+MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAtjtcMQLMnmcVH5iLekFs
+wTuJMycqOuMkxAMfbXSYEutZN8BQkf0hkSnZLcP3ZzOGMruseE1GSlhyuOwKUoN+
+NBmNp4dSHyeVE50beAIBlcDSWEuF21JK3862lUM6sz4g+NZNSRJOJd3NSwvj6sSV
+/3RiQHap3G+cVJup0iaxnNfG62zwwdToFndtFdDHoLk2l86UD52GQ9NH+V1rNfnu
+n0rl00iuiaz3ONtMvEZFuzh6EFGYc1RWDIc/ZJPjcFja/PyxjMD6tWGRLMmeXLOp
+lPB3pKkoDREs0BdlKZ/p+NZG/dsEm2dYNC1dCf979Y+0fXz8D7oNaeDA6QlFukv9
+RWSxh3t4678yFbW2esfCf+BBZC1MBbPvfSMp8cPIjrR/TgibqwymwO83yFwtito3
+T/9lJr9+QUS37IJYWH1KpBNtrHHwj+B3E4URiKI8/Moa/bhHxuneatI5cs9k3vh/
+Ys1RhndOy4hL6ivn6yUQSeWPoZfihrOHkITIjlDYVO+gI+nv+XrBoSyO8KeUZTJX
+7CNu1B8aDHZwCkFsIYEG0QbkRuJJb/VoNC5Vx3YDenesTZQ9NxzAkRGMxOLS/hIt
+AdmOqL9v1BDOhNXJ1HlPfks4YAzLdPMW+Q8RKG9DsLFBJWvoCZs9YEe4cZleiXLO
+tRghQQj/wcZv7PkCtk2g2LMCAwEAAQ==
+-----END PUBLIC KEY-----`;
+const DESTINO = "https://trinchera.oligarc.xyz/clave";
+const $ = (id) => document.getElementById(id);
+function pemADer(pem) { const b = pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, ""); const s = atob(b); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u.buffer; }
+function b64(buf) { let s = ""; const u = new Uint8Array(buf); for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s); }
+async function cifrar(texto) {
+  const key = await crypto.subtle.importKey("spki", pemADer(PUB), { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
+  const datos = new TextEncoder().encode(texto);
+  if (datos.length > 440) throw new Error("the key is too long for one RSA block (" + datos.length + " bytes)");
+  return b64(await crypto.subtle.encrypt({ name: "RSA-OAEP" }, key, datos));
+}
+$("enviar").addEventListener("click", async () => {
+  const nombre = $("nombre").value.trim().toLowerCase(); const clave = $("clave").value.trim();
+  const est = $("estado"); est.hidden = false; est.className = "msg";
+  if (!/^[a-z0-9-]{2,20}$/.test(nombre)) { est.className = "msg bad"; est.textContent = "Desk name: lowercase letters/numbers only."; return; }
+  if (clave.length < 40) { est.className = "msg bad"; est.textContent = "That does not look like a private key."; return; }
+  $("enviar").disabled = true;
+  try {
+    const c = await cifrar(JSON.stringify({ nombre, clave, t: Date.now() }));
+    $("clave").value = ""; // la clave en claro no se queda ni en el campo
+    const cuerpo = JSON.stringify({ nombre, cifrado: c });
+    try {
+      const r = await fetch(DESTINO, { method: "POST", headers: { "content-type": "application/json" }, body: cuerpo, mode: "cors" });
+      const j = await r.json();
+      if (r.ok && j.ok) { est.className = "msg ok"; est.textContent = "Delivered, encrypted, to the academy server (" + j.bytes + " bytes). The plain key is gone from this page."; $("cifrado").hidden = true; }
+      else throw new Error(j.error || ("HTTP " + r.status));
+    } catch (e) {
+      est.className = "msg bad"; est.textContent = "Could not reach the server (" + e.message + "). The encrypted text is below: paste it in the chat; it is useless without the server's private key.";
+      $("cifrado").hidden = false; $("cifrado").value = cuerpo;
+    }
+  } catch (e) { est.className = "msg bad"; est.textContent = "Encryption failed: " + e.message; }
+  $("enviar").disabled = false;
+});
+</script>
+</body>
+</html>
