@@ -11,9 +11,13 @@ import { initOficina, updateOficina, fichaExtraHTML, nextCandleClose, agoShort }
 
 // 10-oct: the Hyperliquid engine took over port 4360 (the trench is out). Same origin when the engine serves this page,
 // then an engine on this PC (ssh tunnel), then the public one behind cloudflared.
-const ENGINES = [...new Set([/^(localhost|127\.0\.0\.1|trinchera\.oligarc\.xyz)$/.test(location.hostname) ? location.origin : null, 'http://localhost:4360', 'https://trinchera.oligarc.xyz'].filter(Boolean))];
+// ?sala=gtrade -> the gTrade room (forex up to 1000x, 5 desks of $100) on port 4370
+const SALA = new URLSearchParams(location.search).get('sala') === 'gtrade' ? 'gtrade' : 'hl';
+const ENGINES = SALA === 'gtrade'
+  ? [...new Set([location.port === '4370' ? location.origin : null, 'http://localhost:4370'].filter(Boolean))]
+  : [...new Set([/^(localhost|127\.0\.0\.1|trinchera\.oligarc\.xyz)$/.test(location.hostname) && location.port !== '4370' ? location.origin : null, 'http://localhost:4360', 'https://trinchera.oligarc.xyz'].filter(Boolean))];
 let API = ENGINES[0];
-const SNAPSHOT = 'academia/estado.json';
+const SNAPSHOT = SALA === 'gtrade' ? 'academia/estado-gtrade.json' : 'academia/estado.json';
 const REFRESH_MS = 15000;
 const TIMEOUT_MS = 3000;
 
