@@ -345,10 +345,12 @@ function deskHTML(p, now) {
   let trades = '';
   if (ops.length) {
     trades = `<div class="desk-trades">` + ops.map((o) =>
-      `<div class="trade-row"><b>${esc(o.simbolo || shortAddr(o.mint))}</b><span class="${cls(o.pnl)}">${pct(o.pct, 0)}</span>${motivoHTML(o.motivo)}</div>`).join('') + `</div>`;
+      `<div class="trade-row"><b>${esc(o.simbolo || shortAddr(o.mint))}</b><span class="${cls(o.pnl)}">${pct(o.pct, 0)}</span>${motivoHTML(o.motivo)}${realExitHTML(o, true)}</div>`).join('') + `</div>`;
   } else {
     trades = `<div class="desk-empty">no trades yet</div>`;
   }
+  const cs = cashableSummary(a.operaciones);
+  const cashable = cs ? `<div class="desk-wait" title="exit oracle: a real sell quote at each exit, never sent">paper <b class="${cls(cs.paper)}">${money(cs.paper)}</b> · cashable <b class="${cls(cs.real)}">${money(cs.real)}</b>${cs.noExit ? ` · <b class="neg">${cs.noExit} no exit</b>` : ''} <span class="dim">(${cs.n} quoted)</span></div>` : '';
   const posHtml = positionRows(a, false, now);
   // nothing open: say what it is doing instead
   let waiting = '';
@@ -361,7 +363,7 @@ function deskHTML(p, now) {
   const rugs = (a.operaciones || []).filter((o) => o.motivo === 'muerto').length;
   return `<div class="desk-n">desk ${p.n}</div>` +
     `<div class="desk-head">${avatarSVG(a.id)}<div style="min-width:0"><div class="desk-name">${esc(a.nombre)}${realBadge(a)}</div><div class="desk-strategy">${esc(a.descripcion || '')}</div></div></div>` +
-    `<div class="desk-money"><span class="bal">${money(eqDesk)}</span><span class="pnl ${cls(pnlPct)}">${pct(pnlPct)}</span></div>` +
+    `<div class="desk-money"><span class="bal">${money(eqDesk)}</span><span class="pnl ${cls(pnlPct)}">${pct(pnlPct)}</span></div>` + cashable +
     `<div class="desk-badge">${estadoPill(a.estado)}<span class="pill dim">DD ${num(a.maxDDPct, 1)}%</span>${a.estado === 'observacion' && a.diasObservacion ? `<span class="pill warn">day ${a.diasObservacion}</span>` : ''}${rugs ? `<span class="pill bad" title="positions that went to zero">${rugs} rug${rugs > 1 ? 's' : ''}</span>` : ''}</div>` +
     sparkline(a.curva) +
     (posHtml ? `<div class="desk-pos">${posHtml}</div>` : '') +
@@ -1282,12 +1284,33 @@ function metricsTable(tr, va) {
   }
   return html;
 }
+/* The exit oracle (10-oct): every partial sale and close gets a REAL sell quote (never sent) in o.cotizadas. Returns what
+ * the trade would have cashed: { pnl, usd, pending, error } or null when the engine has not quoted it. */
+function realExit(o) {
+  const q = o && o.cotizadas; if (!q || !q.length) return null;
+  const err = q.find((c) => c.error); if (err) return { error: err.error };
+  const usd = q.reduce((s, c) => s + (c.usd || 0), 0);
+  const importe = o.importe || (o.pct ? Math.abs(o.pnl / o.pct * 100) : 0);
+  return { usd, pnl: usd - importe, pending: (o.parciales || 0) + (o.motivo === 'muerto' ? 0 : 1) > q.length };
+}
+function realExitHTML(o, short) {
+  const r = realExit(o); if (!r) return '';
+  if (r.error) return `<span class="pill bad" title="${esc(r.error)}">no exit</span>`;
+  return `<span class="pill ${r.pnl >= 0 ? 'good' : 'bad'}" title="what a real sale would have returned at that instant (quoted, not sent)">${short ? '' : 'real '}${money(r.pnl)}${r.pending ? ' …' : ''}</span>`;
+}
+function cashableSummary(ops) {
+  const quoted = (ops || []).map((o) => [o, realExit(o)]).filter(([, r]) => r && !r.error && !r.pending);
+  if (!quoted.length) return null;
+  return { n: quoted.length, paper: quoted.reduce((s, [o]) => s + o.pnl, 0), real: quoted.reduce((s, [, r]) => s + r.pnl, 0), noExit: (ops || []).filter((o) => { const r = realExit(o); return r && r.error; }).length };
+}
 function opsTable(ops) {
   if (!ops || !ops.length) return `<div class="notice">No trades yet at this desk.</div>`;
+  const cs = cashableSummary(ops);
+  const cashable = cs ? `<div class="loading" style="margin-bottom:6px">Exit oracle on ${cs.n} trade${cs.n === 1 ? '' : 's'}: paper <b class="${cls(cs.paper)}">${money(cs.paper)}</b> · cashable <b class="${cls(cs.real)}">${money(cs.real)}</b>${cs.noExit ? ` · <b class="neg">${cs.noExit} with no exit at all</b>` : ''} (a real sell quote at the moment of each exit, never sent)</div>` : '';
   const allIn = ops.filter((o) => o.conviccion).length, sliced = ops.filter((o) => o.parciales > 0).length;
   const note = (o) => (o.conviccion ? `<span class="pill conv">all-in</span>` : '') + (o.parciales > 0 ? `<span class="pill dim" title="partial sales before the close">${o.parciales} slice${o.parciales > 1 ? 's' : ''}</span>` : '');
-  return `<div class="ops-wrap"><table class="ops"><thead><tr><th>token</th><th>in</th><th>out</th><th>P&amp;L</th><th>%</th><th title="highest multiple seen while inside">high</th><th>why</th><th>min</th><th>trigger</th><th></th><th>closed</th></tr></thead><tbody>` +
-    ops.slice(0, 40).map((o) => `<tr><td><a href="#" data-token="${esc(o.mint)}">${esc(o.simbolo || shortAddr(o.mint))}</a></td><td>${price(o.entrada)}</td><td>${o.motivo === 'muerto' ? '0' : price(o.salida)}</td><td class="${cls(o.pnl)}">${money(o.pnl)}</td><td class="${cls(o.pct)}">${pct(o.pct, 0)}</td><td class="${o.maxX >= 2 ? 'pos' : ''}">${o.maxX ? '×' + num(o.maxX, 2) : '—'}</td><td>${motivoHTML(o.motivo)}</td><td>${num(o.min, 0)}</td><td>${esc(disparoLabel(o.disparo))}</td><td>${note(o)}</td><td>${dateShort(o.tOut)}</td></tr>`).join('') +
+  return cashable + `<div class="ops-wrap"><table class="ops"><thead><tr><th>token</th><th>in</th><th>out</th><th>P&amp;L</th><th title="what a real sale would have returned (quoted at the exit, never sent)">real exit</th><th>%</th><th title="highest multiple seen while inside">high</th><th>why</th><th>min</th><th>trigger</th><th></th><th>closed</th></tr></thead><tbody>` +
+    ops.slice(0, 40).map((o) => `<tr><td><a href="#" data-token="${esc(o.mint)}">${esc(o.simbolo || shortAddr(o.mint))}</a></td><td>${price(o.entrada)}</td><td>${o.motivo === 'muerto' ? '0' : price(o.salida)}</td><td class="${cls(o.pnl)}">${money(o.pnl)}</td><td>${realExitHTML(o, true) || '<span class="dim">—</span>'}</td><td class="${cls(o.pct)}">${pct(o.pct, 0)}</td><td class="${o.maxX >= 2 ? 'pos' : ''}">${o.maxX ? '×' + num(o.maxX, 2) : '—'}</td><td>${motivoHTML(o.motivo)}</td><td>${num(o.min, 0)}</td><td>${esc(disparoLabel(o.disparo))}</td><td>${note(o)}</td><td>${dateShort(o.tOut)}</td></tr>`).join('') +
     `</tbody></table></div>` +
     (allIn || sliced ? `<div class="loading" style="margin-top:4px">${allIn ? `${allIn} all-in trade${allIn === 1 ? '' : 's'} (conviction size)` : ''}${allIn && sliced ? ' · ' : ''}${sliced ? `${sliced} with partial sales on the way up` : ''} · high = the best multiple it saw while inside</div>` : '');
 }
