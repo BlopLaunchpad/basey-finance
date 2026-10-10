@@ -16,7 +16,7 @@
 function equityDe(a) { if (!a) return 0; if (typeof a.equity === 'number') return a.equity; return (a.saldo || 0) + Object.values(a.posiciones || {}).reduce((x, q) => x + (q.importe || 0) + (q.pnlAbierto || 0), 0); }
 
 
-import { initOficina, updateOficina, fichaExtraHTML, agoShort, DISPARO_LABEL } from './academia-oficina.js?v=3';
+import { initOficina, updateOficina, fichaExtraHTML, agoShort, DISPARO_LABEL } from './academia-oficina.js?v=4';
 
 const ENGINE_LOCAL = 'http://localhost:4360';
 const ENGINE_DEV_TUNNEL = 'http://localhost:4365';   // development only: an ssh tunnel to the droplet engine (fails instantly when there is none)
@@ -360,7 +360,7 @@ function deskHTML(p, now) {
   }
   const rugs = (a.operaciones || []).filter((o) => o.motivo === 'muerto').length;
   return `<div class="desk-n">desk ${p.n}</div>` +
-    `<div class="desk-head">${avatarSVG(a.id)}<div style="min-width:0"><div class="desk-name">${esc(a.nombre)}</div><div class="desk-strategy">${esc(a.descripcion || '')}</div></div></div>` +
+    `<div class="desk-head">${avatarSVG(a.id)}<div style="min-width:0"><div class="desk-name">${esc(a.nombre)}${realBadge(a)}</div><div class="desk-strategy">${esc(a.descripcion || '')}</div></div></div>` +
     `<div class="desk-money"><span class="bal">${money(eqDesk)}</span><span class="pnl ${cls(pnlPct)}">${pct(pnlPct)}</span></div>` +
     `<div class="desk-badge">${estadoPill(a.estado)}<span class="pill dim">DD ${num(a.maxDDPct, 1)}%</span>${a.estado === 'observacion' && a.diasObservacion ? `<span class="pill warn">day ${a.diasObservacion}</span>` : ''}${rugs ? `<span class="pill bad" title="positions that went to zero">${rugs} rug${rugs > 1 ? 's' : ''}</span>` : ''}</div>` +
     sparkline(a.curva) +
@@ -402,7 +402,7 @@ function renderOffice() {
   puestos.forEach((p, i) => {
     const el = wrap.children[i];
     const a = p.agente;
-    const sig = JSON.stringify([a?.id, a?.estado, a?.saldo, a?.maxDDPct, a?.diasObservacion, a?.posiciones, (a?.operaciones || []).slice(0, 3), (a?.curva || []).length, (a?.curva || []).slice(-1), liveTokens(), Math.floor(now / 60000)]);
+    const sig = JSON.stringify([a?.id, a?.estado, a?.saldo, a?.maxDDPct, a?.diasObservacion, a?.posiciones, (a?.operaciones || []).slice(0, 3), (a?.curva || []).length, (a?.curva || []).slice(-1), liveTokens(), isRealDesk(a), Math.floor(now / 60000)]);
     if (S.sig['desk' + p.n] === sig) return;
     S.sig['desk' + p.n] = sig;
     el.className = 'desk' + (a ? '' : ' vacant');
@@ -410,6 +410,93 @@ function renderOffice() {
     el.dataset.id = a?.id || '';
     el.innerHTML = deskHTML(p, now);
   });
+}
+
+/* ── real wallet: one desk mirrored on Solana ──────────── */
+function realMesas() {
+  const r = S.data?.academia?.real;
+  if (!r) return [];
+  return Array.isArray(r.mesas) && r.mesas.length ? r.mesas : [r];
+}
+function isRealDesk(a) { return !!a && realMesas().some((m) => m.mesa && m.mesa === a.nombre); }
+function realBadge(a) { return isRealDesk(a) ? ` <span class="pill real" title="this desk also trades with real SOL (see Real wallet)">real</span>` : ''; }
+function sol(n, d = 4) { return n == null || !isFinite(n) ? '—' : num(n, d) + ' SOL'; }
+function timeHMS(t) { if (!t) return '—'; const d = new Date(t); return d.toISOString().slice(5, 10).replace('-', '/') + ' ' + d.toISOString().slice(11, 19); }
+function realPositions(r) {
+  const p = r.posiciones;
+  if (!p) return [];
+  if (Array.isArray(p)) return p;
+  return Object.entries(p).map(([mint, q]) => ({ mint, ...q }));
+}
+const REAL_ESTADO = { confirmado: ['ok', 'confirmed'], fallido: ['bad', 'failed'], atrapado: ['bad', 'stuck'], saltado: ['skip', 'skipped'], enviado: ['sent', 'sent'] };
+const REAL_TIPO = { compra: 'buy', venta: 'sell', parcial: 'slice' };
+const REAL_MOTIVO = { precio: 'quote > 3% worse than paper', saldo: 'not enough SOL', tope: 'daily loss cap', abiertas: 'too many open', fontaneria: 'plumbing limit' };
+function realSolscan(sig) { return sig ? `<a href="https://solscan.io/tx/${esc(sig)}" target="_blank" rel="noopener" title="${esc(sig)}">${esc(shortAddr(sig))}</a>` : '—'; }
+function realMesaHTML(r, now) {
+  const dry = r.seco === true;
+  const mode = r.fontaneria ? `plumbing mode ($${num(r.fontaneriaUsd ?? 10, 0)} per buy${r.fontaneriaHechas != null ? `, ${r.fontaneriaHechas} done` : ''})` : 'full size';
+  const pk = r.pubkey || '';
+  // the engine publishes no base for a P&L %: the day's opening balance is the nearest honest one
+  const perdida = r.perdidaDia ?? r.perdidaDiaSol;
+  const capPct = perdida != null && r.saldoInicialDia ? perdida / r.saldoInicialDia * 100 : null;
+  const pnlBasePct = r.pnlRealSol != null && r.saldoInicialDia ? r.pnlRealSol / r.saldoInicialDia * 100 : null;
+  const ventas = r.operaciones != null && r.compras != null ? Math.max(0, r.operaciones - r.compras) : null;
+  const stats =
+    `<div class="stat"><div class="k">SOL balance</div><div class="v">${sol(r.saldoSol)}<small> · ${money(r.saldoUsd)}</small></div></div>` +
+    `<div class="stat"><div class="k">real equity</div><div class="v">${money(r.equityReal)}</div></div>` +
+    `<div class="stat"><div class="k">real P&amp;L</div><div class="v ${cls(r.pnlReal)}">${money(r.pnlReal)}<small> ${pnlBasePct != null ? pct(pnlBasePct) + ' of day start' : r.pnlRealSol != null ? '· ' + sol(r.pnlRealSol) : ''}</small></div></div>` +
+    `<div class="stat"><div class="k">trades</div><div class="v">${r.operaciones ?? '—'}<small> · ${r.compras ?? '—'} buys, ${ventas ?? '—'} sells${r.atrapadas ? `, <span class="neg">${r.atrapadas} stuck</span>` : ''}${r.ganadas != null && r.operaciones ? ` · win ${winRate(r.ganadas, r.operaciones)}` : ''}</small></div></div>` +
+    `<div class="stat"><div class="k">avg slippage vs paper</div><div class="v ${r.desfaseMedioPct != null ? (r.desfaseMedioPct > 0 ? 'neg' : 'pos') : ''}">${pct(r.desfaseMedioPct)}</div></div>` +
+    `<div class="stat"><div class="k">avg latency</div><div class="v">${r.latenciaMediaMs != null ? num(r.latenciaMediaMs, 0) + '<small> ms</small>' : '—'}</div></div>` +
+    `<div class="stat"><div class="k">tips + fees paid</div><div class="v">${r.propinasSol != null || r.feesSol != null ? sol((r.propinasSol || 0) + (r.feesSol || 0)) : '—'}<small> · tips ${sol(r.propinasSol)}</small></div></div>` +
+    `<div class="stat"><div class="k">daily loss cap${r.topePerdidaDiaPct != null ? ' ' + num(r.topePerdidaDiaPct, 0) + '%' : ''}</div><div class="v${r.paradoPorPerdida ? ' cap' : ''}">${capPct != null ? pct(capPct, 1, false) : '—'}<small> · ${sol(perdida)} of ${sol(r.saldoInicialDia)}${r.paradoPorPerdida ? ' · <b class="neg">STOPPED</b>' : ''}</small></div></div>`;
+  const pos = realPositions(r);
+  const posHtml = pos.length ? `<div class="real-pos">` + pos.map((p) => {
+    const mins = p.t ? (now - p.t) / 60000 : null;
+    return `<div class="pos-row"><span class="sym" data-token="${esc(p.mint || '')}">${esc(p.simbolo || shortAddr(p.mint))}</span>` +
+      `<span><b>${p.tokens != null ? compactN(p.tokens) : '—'}</b> tokens</span>` +
+      `<span>${sol(p.solGastado)} in</span>` +
+      `<span title="real fill price">@ ${price(p.precioReal)}</span>` +
+      `<span title="minutes inside">${minsLabel(mins)}</span>` +
+      (p.atrapado ? `<span class="stuck">stuck</span>` : '') +
+      `<span>tx ${realSolscan(p.firma)}</span></div>`;
+  }).join('') + `</div>` : `<div class="loading">nothing open in the real wallet</div>`;
+  const ult = Array.isArray(r.ultimas) ? r.ultimas.slice().sort((a, b) => (b.t || 0) - (a.t || 0)).slice(0, 50) : [];
+  const rows = ult.length ? `<div class="rrows">` + ult.map((o) => {
+    const [c, label] = REAL_ESTADO[o.estado] || ['skip', o.estado || '—'];
+    const amt = o.solGastado != null ? sol(o.solGastado) : o.solRecibido != null ? sol(o.solRecibido) : o.importeUsd != null ? money(o.importeUsd) : '';
+    const why = o.motivo ? `<span class="why">· ${esc(REAL_MOTIVO[o.motivo] || o.motivo)}</span>` : '';
+    return `<div class="rrow ${c}"><div class="r1"><span class="tm">${timeHMS(o.t)}</span><span class="ty">${esc(REAL_TIPO[o.tipo] || o.tipo || '—')}</span>` +
+      `<span class="sy" data-token="${esc(o.mint || '')}">${esc(o.simbolo || shortAddr(o.mint))}</span><span class="st ${c}">${esc(label)}</span>${why}` +
+      (amt ? `<span class="amt">${amt}${(o.solGastado != null || o.solRecibido != null) && o.importeUsd != null ? ` <small>(${money(o.importeUsd)})</small>` : ''}</span>` : '') + `</div>` +
+      `<div class="r2"><span><i>paper</i><b>${price(o.precioPapel)}</b></span><span><i>real</i><b>${price(o.precioReal)}</b></span>` +
+      `<span><i>slip</i><b class="${o.desfasePct != null ? (o.desfasePct > 0 ? 'neg' : o.desfasePct < 0 ? 'pos' : '') : ''}">${pct(o.desfasePct)}</b></span>` +
+      `<span><i>lat</i><b>${o.latenciaMs != null ? num(o.latenciaMs, 0) + ' ms' : '—'}</b></span>` +
+      `<span><i>tip</i><b>${o.propinaSol != null ? num(o.propinaSol, 5) : '—'}</b></span>` +
+      `<span><i>tx</i>${realSolscan(o.firma)}</span></div></div>`;
+  }).join('') + `</div>` : `<div class="loading">no real trade yet${r.fontaneria ? ' · the first buys are plumbing ($10 each)' : ''}</div>`;
+  return `<div class="real-box">` +
+    `<div class="real-head"><span class="rt">Real wallet</span><span>·</span><span class="rm">${esc(r.mesa || '—')}</span><span>·</span><span class="rmode">${esc(mode)}</span>` +
+    `<span class="pill ${dry ? 'dry' : 'live'}" title="${dry ? 'dry run: an ephemeral key, nothing is sent to the chain' : 'a real key, real SOL on Solana mainnet'}">${dry ? 'dry' : 'live'}</span>` +
+    (r.enCola ? `<span class="pill dim">${r.enCola} queued</span>` : '') + `</div>` +
+    `<div class="real-addr"><code>${pk ? esc(pk) : '—'}</code>` +
+    (pk ? `<a href="https://solscan.io/account/${esc(pk)}" target="_blank" rel="noopener">Solscan</a><a href="https://gmgn.ai/sol/address/${esc(pk)}" target="_blank" rel="noopener">GMGN</a><button class="btn" type="button" data-copy="${esc(pk)}">copy</button>` : '') + `</div>` +
+    `<div class="office-summary real-stats">${stats}</div>` +
+    `<div class="real-h4">Open real positions${pos.length ? ` <small>(${pos.length})</small>` : ''}</div>${posHtml}` +
+    `<div class="real-h4">Last real trades${ult.length ? ` <small>(${ult.length})</small>` : ''}</div>${rows}` +
+    `</div>`;
+}
+function renderReal() {
+  const sec = $('real'); if (!sec) return;
+  const mesas = realMesas();
+  if (!mesas.length) { if (!sec.hidden) sec.hidden = true; return; }
+  if (sec.hidden) sec.hidden = false;
+  const now = Date.now();
+  const r0 = mesas[0];
+  setText($('realSub'), `${mesas.map((m) => m.mesa).filter(Boolean).join(', ') || 'one desk'} · ${r0.seco ? 'dry run' : 'live on Solana'} · ${r0.fontaneria ? 'plumbing mode' : 'full size'} · SOL ${r0.precioSol ? money(r0.precioSol) : '—'}`);
+  const sig = JSON.stringify(mesas) + Math.floor(now / 60000);
+  if (S.sig.real === sig) return; S.sig.real = sig;
+  $('realBody').innerHTML = mesas.map((m) => realMesaHTML(m, now)).join('');
 }
 
 /* ── office hours: the ledger hour by hour ─────────────── */
@@ -1252,7 +1339,7 @@ async function openAgent(id) {
   const where = a.kind === 'desk' ? `<span class="pill ok">desk ${a.puesto}</span>` : a.kind === 'fired' ? `<span class="pill bad">fired</span>` : `<span class="pill dim">in the hall</span>`;
   const estado = a.estado ? estadoPill(a.estado) : '';
   const tipo = g?.disparo?.tipo;
-  let html = `<div class="modal-head">${avatarSVG(a.id)}<div style="min-width:0"><h3>${esc(a.nombre)}</h3><div class="mh-sub"><span>${esc(a.id)}</span><span>· gen ${gen ?? '?'}</span><span>· ${esc(originLabel(a.origen))}</span>${tipo ? `<span class="pill pad">${esc(disparoLabel(tipo))}</span>` : ''}${where}${estado}</div></div><button class="modal-close" type="button" data-close>×</button></div>`;
+  let html = `<div class="modal-head">${avatarSVG(a.id)}<div style="min-width:0"><h3>${esc(a.nombre)}</h3><div class="mh-sub"><span>${esc(a.id)}</span><span>· gen ${gen ?? '?'}</span><span>· ${esc(originLabel(a.origen))}</span>${tipo ? `<span class="pill pad">${esc(disparoLabel(tipo))}</span>` : ''}${where}${estado}${realBadge(a)}</div></div><button class="modal-close" type="button" data-close>×</button></div>`;
   html += `<div class="modal-body">`;
   const sizeNote = a.kind === 'desk' && a.importe != null ? ` · trades $${num(a.importe, 0)} per token${a.aprendido ? ` · learned ${a.aprendido} time${a.aprendido > 1 ? 's' : ''} from the hall` : ''}` : '';
   html += `<div><h4>Strategy</h4><div class="strategy">${esc(a.descripcion || '—')}</div>${a.motivo || sizeNote ? `<div class="loading" style="margin-top:4px">${esc(a.motivo || '')}${esc(sizeNote)}</div>` : ''}</div>`;
@@ -1307,6 +1394,7 @@ function render() {
     return;
   }
   renderOffice();
+  renderReal();
   renderHours();
   renderFame();
   renderTrench();
@@ -1321,9 +1409,24 @@ function render() {
 /* ── wiring ────────────────────────────────────────────── */
 function init() {
   document.addEventListener('click', (ev) => {
-    const t = ev.target.closest('[data-token], [data-open], [data-close], .desk[data-id], [data-req]');
+    const t = ev.target.closest('[data-token], [data-open], [data-close], .desk[data-id], [data-req], [data-copy]');
     if (!t) return;
     if (t.hasAttribute('data-close')) { closeModal(); return; }
+    if (t.dataset.copy) {
+      const txt = t.dataset.copy;
+      const done = () => toast('Address copied.');
+      const fallback = () => {
+        // no clipboard API (or it refused): select the address and try the old command; either way the user can copy by hand
+        const code = t.parentElement?.querySelector('code');
+        try { if (code) { const sel = window.getSelection(); const rg = document.createRange(); rg.selectNodeContents(code); sel.removeAllRanges(); sel.addRange(rg); } } catch (e) { /* ignore */ }
+        let ok = false;
+        try { ok = document.execCommand && document.execCommand('copy'); } catch (e) { ok = false; }
+        toast(ok ? 'Address copied.' : 'Address selected: copy it by hand.');
+      };
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(txt).then(done, fallback);
+      else fallback();
+      return;
+    }
     if (t.dataset.req) { decideRequest(t.dataset.req, t.dataset.act); return; }
     if (t.dataset.token) { ev.preventDefault(); ev.stopPropagation(); openToken(t.dataset.token); return; }
     const id = t.dataset.open || t.dataset.id;

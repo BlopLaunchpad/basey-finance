@@ -198,6 +198,49 @@ section > h2 .sub { font: 12px/1 var(--mono); color: var(--text-faint); letter-s
 }
 .vacant .chair-icon { width: 34px; height: 34px; opacity: .45; }
 
+/* ── real wallet (one desk trading real SOL) ────────────── */
+.pill.real { color: #14f195; border-color: rgba(20,241,149,.55); background: rgba(20,241,149,.1); font-weight: 700; }
+.pill.live { color: #0a0f1c; background: #14f195; border-color: #14f195; font-weight: 700; }
+.pill.dry { color: var(--caution); border-color: rgba(217,164,65,.5); background: rgba(217,164,65,.08); }
+.real-box { background: var(--surface); border: 1px solid rgba(20,241,149,.35); border-radius: 12px; padding: 12px; margin-bottom: 12px; min-width: 0; box-shadow: 0 0 24px rgba(20,241,149,.06); }
+.real-box + .real-box { margin-top: 12px; }
+.real-head { display: flex; gap: 6px 10px; align-items: center; flex-wrap: wrap; font: 600 13px/1.3 var(--sans); }
+.real-head .rt { letter-spacing: .12em; text-transform: uppercase; color: #14f195; }
+.real-head .rm { color: var(--text); }
+.real-head .rmode { color: var(--text-dim); font-weight: 400; }
+.real-addr { margin-top: 8px; display: flex; gap: 6px 10px; align-items: center; flex-wrap: wrap; font: 12px/1.4 var(--mono); color: var(--text-dim); min-width: 0; }
+.real-addr code { color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px; overflow-wrap: anywhere; }
+.real-addr .btn { padding: 4px 8px; font-size: 11px; }
+.real-stats { margin: 10px 0 0; }
+.real-stats .stat .v { font-size: 17px; }
+.real-stats .stat .v.cap { color: var(--fatal); }
+.real-stats .stat .v small { display: block; line-height: 1.35; margin-top: 1px; }
+.real-h4 { margin: 12px 0 6px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+.real-pos { display: flex; flex-direction: column; gap: 4px; }
+.real-pos .pos-row { background: var(--surface-2); border-radius: 8px; padding: 6px 9px; }
+.real-pos .pos-row .stuck { color: var(--fatal); font-weight: 700; }
+.rrows { display: flex; flex-direction: column; gap: 5px; max-height: 480px; overflow-y: auto; scrollbar-width: thin; }
+.rrow { background: var(--surface-2); border: 1px solid transparent; border-left: 3px solid var(--line); border-radius: 8px; padding: 6px 10px; font: 11.5px/1.45 var(--mono); color: var(--text-dim); min-width: 0; }
+.rrow.ok { border-left-color: var(--safe); }
+.rrow.bad { border-left-color: var(--fatal); }
+.rrow.skip { border-left-color: var(--line); opacity: .75; }
+.rrow.sent { border-left-color: var(--accent); }
+.rrow .r1 { display: flex; gap: 3px 10px; align-items: baseline; flex-wrap: wrap; }
+.rrow .r1 .tm { color: var(--text-faint); }
+.rrow .r1 .ty { color: var(--text); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: 10.5px; }
+.rrow .r1 .sy { color: var(--text); font-weight: 700; }
+.rrow .r1 .st { font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: 10.5px; }
+.rrow .r1 .st.ok { color: var(--safe); }
+.rrow .r1 .st.bad { color: var(--fatal); }
+.rrow .r1 .st.skip { color: var(--text-faint); }
+.rrow .r1 .st.sent { color: var(--accent); }
+.rrow .r1 .why { color: var(--text-faint); font-size: 10.5px; }
+.rrow .r1 .amt { margin-left: auto; color: var(--text); font-weight: 600; }
+.rrow .r2 { display: flex; gap: 3px 12px; flex-wrap: wrap; margin-top: 2px; }
+.rrow .r2 span { white-space: nowrap; }
+.rrow .r2 b { color: var(--text); font-weight: 600; }
+.rrow .r2 i { font-style: normal; color: var(--text-faint); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; margin-right: 4px; }
+
 /* ── office hours (the ledger by hour) ──────────────────── */
 .hours-chart { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 8px 2px; }
 .hours-chart svg { display: block; width: 100%; height: 120px; }

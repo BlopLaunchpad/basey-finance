@@ -884,6 +884,15 @@ function drawDesk(ctx, desk, now) {
     });
     ctx.stroke();
   }
+  // the desk that also trades with real SOL: a small "$" coin above the monitor
+  const real = R.data?.academia?.real;
+  const realMesas = real ? (Array.isArray(real.mesas) && real.mesas.length ? real.mesas : [real]) : [];
+  if (ag && realMesas.some((m) => m.mesa && m.mesa === ag.nombre)) {
+    const cx = sx + w / 2 + tw * .04, cy = sy + w / 4 - tw * .05 - h - tw * .06, cr = Math.max(3, tw * .085);
+    ctx.fillStyle = '#14f195'; ctx.beginPath(); ctx.arc(cx, cy, cr, 0, 7); ctx.fill();
+    ctx.fillStyle = '#0a0f1c'; ctx.font = `700 ${Math.max(5, cr * 1.5)}px ${monoFont()}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('$', cx, cy + .5); ctx.textAlign = 'left';
+  }
   R.hits.push({ kind: 'desk', n: desk.n, id: ag?.id || null, x0: p.x - tw * .5, x1: p.x + tw * .5, y0: sy - w / 4 - h - tw * .1, y1: p.y + G.th * .4, depth: desk.tx + desk.ty });
 }
 function drawChair(ctx, seat) {

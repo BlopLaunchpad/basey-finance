@@ -7,7 +7,7 @@
 <!-- Private tool, same policy as the rest of basey.finance: out of search engines. -->
 <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
 <meta name="googlebot" content="noindex, nofollow">
-<link rel="stylesheet" href="academia.css?v=4">
+<link rel="stylesheet" href="academia.css?v=5">
 </head>
 <body>
 
@@ -47,6 +47,12 @@
         <p class="office-note" id="officeNote">Every desk scans every live token once a minute and buys $10 per token, at most 5 open at once, on a $100 paper balance. A token whose liquidity dies is a rug: the position goes to zero. A desk with nothing open says below what it is doing.</p>
         <div class="office-summary" id="officeSummary"></div>
         <div class="desks" id="desks"></div>
+      </section>
+
+      <section id="real" hidden>
+        <h2>Real wallet <span class="sub" id="realSub">one desk trades with real SOL</span></h2>
+        <div id="realBody"></div>
+        <p class="trench-note">One desk mirrors its paper decisions on Solana the moment it takes them. <b>plumbing mode</b> = every buy capped at $10 while the pipes are checked; <b>full size</b> = the desk's own size. <b>Slippage vs paper</b> is the real fill against the paper price; <b>latency</b> is decision to confirmation. Daily loss cap: past it the wallet stops buying for the day (it still sells). <b>stuck</b> = a sale failed three times and the tokens stay in the wallet. Every signature links to Solscan.</p>
       </section>
 
       <section id="hours">
@@ -166,6 +172,6 @@
   </defs>
 </svg>
 
-<script type="module" src="academia.js?v=7"></script>
+<script type="module" src="academia.js?v=8"></script>
 </body>
 </html>
