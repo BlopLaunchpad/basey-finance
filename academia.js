@@ -323,7 +323,12 @@ function renderOffice() {
     `<div class="stat"><div class="k">hired</div><div class="v">${hired.length}<small> / ${puestos.length}</small></div></div>` +
     `<div class="stat"><div class="k">balance (paper)</div><div class="v">${money(bal)}</div></div>` +
     `<div class="stat"><div class="k">P&amp;L</div><div class="v ${cls(pnl)}">${money(pnl)}<small> ${ini ? pct(pnl / ini * 100) : ''}</small></div></div>` +
-    `<div class="stat"><div class="k">open · performing · probation</div><div class="v">${open}<small> · </small><span class="pos">${perf}</span><small> · </small><span style="color:var(--caution)">${prob}</span></div></div>`,
+    `<div class="stat"><div class="k">open · performing · probation</div><div class="v">${open}<small> · </small><span class="pos">${perf}</span><small> · </small><span style="color:var(--caution)">${prob}</span></div></div>` +
+    (() => { // the office ledger: every close of every desk since it opened, fired desks included (never resets)
+      const L = d?.academia?.libro; if (!L) return '';
+      const hoy = (L.porDia || {})[new Date().toISOString().slice(0, 10)];
+      return `<div class="stat" title="every trade of every desk since ${new Date(L.desde).toISOString().slice(0, 16).replace('T', ' ')} UTC, fired desks included; never resets"><div class="k">ledger (whole office)</div><div class="v ${cls(L.realizado)}">${money(L.realizado)}<small> · ${num(L.operaciones, 0)} trades · ${L.operaciones ? Math.round(L.ganadas / L.operaciones * 100) : 0}% won · ${num(L.despedidos || 0, 0)} fired${L.liquidaciones ? ' · ' + L.liquidaciones + ' liquidated' : ''}${hoy ? ' · today ' + money(hoy.pnl) : ''}</small></div></div>`;
+    })(),
     'officeSummary');
   setText($('officeSub'), `${hired.length} of ${puestos.length} desks taken · $${num(d?.academia?.saldoPuesto ?? 100, 0)} per desk`);
 
