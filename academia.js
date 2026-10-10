@@ -1288,20 +1288,20 @@ function metricsTable(tr, va) {
  * the trade would have cashed: { pnl, usd, pending, error } or null when the engine has not quoted it. */
 function realExit(o) {
   const q = o && o.cotizadas; if (!q || !q.length) return null;
-  const err = q.find((c) => c.error); if (err) return { error: err.error };
-  const usd = q.reduce((s, c) => s + (c.usd || 0), 0);
+  const err = q.find((c) => c.error);
+  const usd = q.reduce((s, c) => s + (c.usd || 0), 0); // a quote that failed (no route: pool already drained) cashes 0
   const importe = o.importe || (o.pct ? Math.abs(o.pnl / o.pct * 100) : 0);
-  return { usd, pnl: usd - importe, pending: (o.parciales || 0) + (o.motivo === 'muerto' ? 0 : 1) > q.length };
+  return { usd, pnl: usd - importe, error: err && err.error, pending: !err && (o.parciales || 0) + (o.motivo === 'muerto' ? 0 : 1) > q.length };
 }
 function realExitHTML(o, short) {
   const r = realExit(o); if (!r) return '';
-  if (r.error) return `<span class="pill bad" title="${esc(r.error)}">no exit</span>`;
+  if (r.error) return `<span class="pill bad" title="no real exit at that moment (${esc(r.error)}): the position cashes ${money(r.usd)}">no exit ${money(r.pnl)}</span>`;
   return `<span class="pill ${r.pnl >= 0 ? 'good' : 'bad'}" title="what a real sale would have returned at that instant (quoted, not sent)">${short ? '' : 'real '}${money(r.pnl)}${r.pending ? ' …' : ''}</span>`;
 }
 function cashableSummary(ops) {
-  const quoted = (ops || []).map((o) => [o, realExit(o)]).filter(([, r]) => r && !r.error && !r.pending);
+  const quoted = (ops || []).map((o) => [o, realExit(o)]).filter(([, r]) => r && !r.pending); // failed quotes count as 0 cashed
   if (!quoted.length) return null;
-  return { n: quoted.length, paper: quoted.reduce((s, [o]) => s + o.pnl, 0), real: quoted.reduce((s, [, r]) => s + r.pnl, 0), noExit: (ops || []).filter((o) => { const r = realExit(o); return r && r.error; }).length };
+  return { n: quoted.length, paper: quoted.reduce((s, [o]) => s + o.pnl, 0), real: quoted.reduce((s, [, r]) => s + r.pnl, 0), noExit: quoted.filter(([, r]) => r.error).length };
 }
 function opsTable(ops) {
   if (!ops || !ops.length) return `<div class="notice">No trades yet at this desk.</div>`;
