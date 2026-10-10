@@ -16,9 +16,10 @@
 function equityDe(a) { if (!a) return 0; if (typeof a.equity === 'number') return a.equity; return (a.saldo || 0) + Object.values(a.posiciones || {}).reduce((x, q) => x + (q.importe || 0) + (q.pnlAbierto || 0), 0); }
 
 
-import { initOficina, updateOficina, fichaExtraHTML, agoShort, DISPARO_LABEL } from './academia-oficina.js?v=2';
+import { initOficina, updateOficina, fichaExtraHTML, agoShort, DISPARO_LABEL } from './academia-oficina.js?v=3';
 
 const ENGINE_LOCAL = 'http://localhost:4360';
+const ENGINE_DEV_TUNNEL = 'http://localhost:4365';   // development only: an ssh tunnel to the droplet engine (fails instantly when there is none)
 const ENGINE_PUBLIC = 'https://trinchera.oligarc.xyz';
 const SNAPSHOT = 'academia/estado.json';
 const REFRESH_MS = 15000;
@@ -28,7 +29,7 @@ function apiCandidates() {
   const list = [];
   const own = /^https?:$/.test(location.protocol) && !/basey\.finance|github\.io/i.test(location.host);
   if (own) list.push(location.origin);          // the engine serves the page itself
-  list.push(ENGINE_LOCAL, ENGINE_PUBLIC);
+  list.push(ENGINE_LOCAL, ENGINE_DEV_TUNNEL, ENGINE_PUBLIC);
   return [...new Set(list)];
 }
 
@@ -143,16 +144,26 @@ const DISPARO = {
   holders: { label: 'community believer', what: (d) => `holders up ${d.dHolders5Min}% or more in 5 minutes and buyers above sellers` },
   rebote: { label: 'knife catcher', what: (d) => `after an hour down ${d.caida1hMin}% or more: the first green minute with more buys than sells` },
   nacimiento: { label: 'trench rat', what: (d) => `a token under 15 minutes old with at least ${d.netos5Min} net buyers and up ${d.subidaMin}% or more since the last minute` },
+  devVendio: { label: 'dev-dump buyer', what: (d) => `the dev sold ${d.devVendioMin}% or more of its bag in the last 15 minutes and at least ${d.netos5Min} net buyers keep coming with more buys than sells` },
+  tuit: { label: 'tweet chaser', what: (d) => `a watched X account posted the contract address at most ${d.tuitMaxMin} min ago and at least ${d.netos5Min} net buyers followed` },
 };
-const DISPARO_ORDER = ['flujo', 'listos', 'momentum', 'holders', 'rebote', 'nacimiento'];
+const DISPARO_ORDER = ['flujo', 'listos', 'momentum', 'holders', 'rebote', 'nacimiento', 'devVendio', 'tuit'];
 function disparoLabel(t) { return DISPARO[t]?.label || DISPARO_LABEL?.[t] || t || 'strategy'; }
 const PAD_LABEL = { 'sin pad': 'no pad', cualquiera: 'any pad', 'pump.fun': 'pump.fun', launchlab: 'LaunchLab', 'met-dbc': 'Meteora DBC', stonkfun: 'stonk.fun' };
 function padLabel(p) { return PAD_LABEL[p] || p || 'no pad'; }
-const MOTIVO = { objetivo: 'target', stop: 'stop', trailing: 'trailing', tiempo: 'time up', 'listos fuera': 'smart money left', muerto: 'rug', fin: 'data end' };
+const MOTIVO = { objetivo: 'target', stop: 'stop', trailing: 'trailing', tiempo: 'time up', 'listos fuera': 'smart money left', muerto: 'rug', fin: 'data end', 'sin subida': 'no pump', 'dev vende': 'dev sold', despido: 'closed: fired' };
 function motivoHTML(m) {
   if (m === 'muerto') return `<span class="why rug skull">rug</span>`;
-  return `<span class="why">${esc(MOTIVO[m] || m || '')}</span>`;
+  const warn = m === 'dev vende' || m === 'despido' ? ' warn' : '';
+  return `<span class="why${warn}">${esc(MOTIVO[m] || m || '')}</span>`;
 }
+function hourKeyLabel(k) {
+  // "2026-10-10T09" -> "10/10 09:00" ; a bare "9" (hour of day) -> "09:00"
+  const s = String(k ?? '');
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}$/.test(s)) return s.slice(5, 10).replace('-', '/') + ' ' + s.slice(11, 13) + ':00';
+  return String(s).padStart(2, '0') + ':00';
+}
+function winRate(ganadas, ops) { return ops ? Math.round((ganadas || 0) / ops * 100) + '%' : '—'; }
 
 /* ── avatars: deterministic from the id (identicon with a frame shape) ── */
 function avatarSVG(id, extraClass = '') {
@@ -401,6 +412,104 @@ function renderOffice() {
   });
 }
 
+/* ── office hours: the ledger hour by hour ─────────────── */
+function hoursChart(rows) {
+  // rows come newest first; draw oldest -> newest, one bar per hour, the current hour outlined
+  const list = rows.slice().reverse();
+  if (!list.length) return '';
+  // the viewBox follows the real width so the axis text keeps its size on a phone (same trick as the history chart)
+  const W = Math.max(320, Math.round(($('hoursBody')?.clientWidth || 760) - 18)), H = 110, L = 44, R = 8, T = 10, B = 20;
+  const nowKey = new Date().toISOString().slice(0, 13);
+  let hi = 0; for (const r of list) hi = Math.max(hi, Math.abs(r.pnl || 0));
+  if (hi <= 0) hi = 1;
+  const y0 = T + (H - T - B) / 2;
+  const scale = (H - T - B) / 2 / hi;
+  const slot = (W - L - R) / list.length;
+  const bw = Math.max(2, Math.min(22, slot * 0.72));
+  let out = `<line class="grid" x1="${L}" x2="${W - R}" y1="${y0.toFixed(1)}" y2="${y0.toFixed(1)}"/>`;
+  out += `<text class="axis" x="${L - 4}" y="${T + 4}" text-anchor="end">${money(hi)}</text><text class="axis" x="${L - 4}" y="${(y0 + 3).toFixed(1)}" text-anchor="end">$0</text><text class="axis" x="${L - 4}" y="${H - B}" text-anchor="end">${money(-hi)}</text>`;
+  list.forEach((r, i) => {
+    const x = L + slot * i + (slot - bw) / 2;
+    const h = Math.abs(r.pnl || 0) * scale;
+    const y = r.pnl >= 0 ? y0 - h : y0;
+    const cur = r.hora === nowKey;
+    out += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="1.5" fill="${r.pnl > 0 ? '#3fbf7f' : r.pnl < 0 ? '#e05260' : '#6b7684'}" opacity="${cur ? 1 : 0.8}"><title>${esc(hourKeyLabel(r.hora))} UTC · ${esc(money(r.pnl))} · ${r.ops} trades · ${r.rugs} rugs</title></rect>`;
+    if (cur) out += `<rect x="${(x - 2).toFixed(1)}" y="${T - 4}" width="${(bw + 4).toFixed(1)}" height="${H - T - B + 8}" rx="3" fill="none" stroke="#5b8cff" stroke-width="1" stroke-dasharray="3 2"/>`;
+    if (list.length <= 12 || i % Math.ceil(list.length / 8) === 0 || i === list.length - 1) out += `<text class="axis" x="${(x + bw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(String(r.hora).slice(11, 13) || hourKeyLabel(r.hora))}h</text>`;
+  });
+  return `<div class="hours-chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${out}</svg></div>`;
+}
+function renderHours() {
+  const lib = S.data?.academia?.libro;
+  const rows = (lib?.porHoraOficina || []).slice(0, 48);
+  const el = $('hoursBody');
+  if (!lib || !Array.isArray(lib.porHoraOficina)) {
+    setHTML(el, `<div class="notice">This engine does not publish the ledger by hour yet (academia.libro.porHoraOficina).</div>`, 'hours');
+    setText($('hoursSub'), 'no hourly ledger');
+    return;
+  }
+  const nowKey = new Date().toISOString().slice(0, 13);
+  const sig = JSON.stringify(rows) + nowKey + '@' + (el.clientWidth || 0);
+  if (S.sig.hours === sig) return; S.sig.hours = sig;
+  const tot = rows.reduce((s, r) => s + (r.pnl || 0), 0);
+  const green = rows.filter((r) => r.pnl > 0).length;
+  setText($('hoursSub'), rows.length ? `last ${rows.length} hour${rows.length === 1 ? '' : 's'} with trades · ${money(tot)} realized · ${green} green, ${rows.length - green} red · best and worst desk of each hour` : 'no closed trade yet this session');
+  if (!rows.length) { el.innerHTML = `<div class="notice">No closed trade yet since the ledger started${lib.desde ? ' (' + dateShort(lib.desde) + ' UTC)' : ''}.</div>`; return; }
+  const trows = rows.map((r) => {
+    const cur = r.hora === nowKey;
+    const best = r.mejor ? `<span class="hb"><i>best</i><b>${esc(r.mejor.nombre)}</b> <span class="${cls(r.mejor.pnl)}">${money(r.mejor.pnl)}</span><small> ${r.mejor.ops} trade${r.mejor.ops === 1 ? '' : 's'}</small></span>` : `<span class="hb"><i>best</i>—</span>`;
+    const worst = r.peor ? `<span class="hb"><i>worst</i><b>${esc(r.peor.nombre)}</b> <span class="${cls(r.peor.pnl)}">${money(r.peor.pnl)}</span><small> ${r.peor.ops} trade${r.peor.ops === 1 ? '' : 's'}</small></span>` : `<span class="hb"><i>worst</i>${r.mejor ? 'only one desk traded' : '—'}</span>`;
+    return `<div class="hrow${cur ? ' now' : ''}" data-hour="${esc(r.hora)}">` +
+      `<div class="h1"><span class="hh">${esc(hourKeyLabel(r.hora))}${cur ? ' <em>now</em>' : ''}</span><span class="hp ${cls(r.pnl)}">${money(r.pnl)}</span>` +
+      `<span class="hm"><b>${r.ops}</b> trades</span><span class="hm"><b class="${r.rugs ? 'neg' : ''}">${r.rugs}</b> rug${r.rugs === 1 ? '' : 's'}</span><span class="hm">win <b>${winRate(r.ganadas, r.ops)}</b></span></div>` +
+      `<div class="h2">${best}${worst}</div></div>`;
+  }).join('');
+  el.innerHTML = hoursChart(rows) + `<div class="hrows">${trows}</div>`;
+}
+
+/* ── hall of fame: everyone who sat at a desk, best to worst ─ */
+function fameRows() {
+  const d = S.data; const lib = d?.academia?.libro;
+  const rank = (lib?.ranking || []).map((r) => ({ ...r, fromLedger: true }));
+  const ids = new Set(rank.map((r) => r.id));
+  // the fired ones the ledger has not seen (hired before it, or before the last restart): from their dismissal file
+  const base = d?.academia?.saldoPuesto ?? d?.academia?.riesgo?.saldo ?? 100;
+  const extra = (d?.academia?.despedidos || []).filter((f) => !ids.has(f.id)).map((f) => ({
+    id: f.id, nombre: f.nombre, pnl: f.netoPct != null ? f.netoPct / 100 * base : null, ops: f.operaciones, ganadas: null, rugs: null,
+    contratado: f.contratado, despedido: f.despedido, motivoDespido: f.motivo, sentado: false, mejorEquity: null, disparo: null, descripcion: f.descripcion, fromLedger: false,
+  }));
+  const all = [...rank, ...extra];
+  all.sort((a, b) => ((b.pnl ?? -1e9) - (a.pnl ?? -1e9)) || ((b.ops || 0) - (a.ops || 0)));
+  return all;
+}
+function renderFame() {
+  const d = S.data; const lib = d?.academia?.libro;
+  const el = $('fameBody');
+  if (!lib || !Array.isArray(lib.ranking)) {
+    setHTML(el, `<div class="notice">This engine does not publish the ranking yet (academia.libro.ranking).</div>`, 'fame');
+    setText($('fameSub'), 'no ranking');
+    return;
+  }
+  const rows = fameRows();
+  const sitting = rows.filter((r) => r.sentado).length;
+  const sig = JSON.stringify(rows.map((r) => [r.id, r.pnl, r.ops, r.sentado, r.despedido]));
+  setText($('fameSub'), `${rows.length} trader${rows.length === 1 ? '' : 's'} through the desks · ${sitting} sitting now · ${rows.length - sitting} gone · realized P&L, best to worst${lib.desde ? ' · ledger since ' + dateShort(lib.desde) + ' UTC' : ''}`);
+  if (S.sig.fame === sig) return; S.sig.fame = sig;
+  if (!rows.length) { el.innerHTML = `<div class="notice">Nobody has closed a trade yet.</div>`; return; }
+  const now = Date.now();
+  el.innerHTML = `<div class="fame-list">` + rows.map((r, i) => {
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1);
+    const status = r.sentado ? `<span class="pill ok">sitting</span>` :
+      r.despedido ? `<span class="pill bad" title="${esc(r.motivoDespido || '')}">fired ${esc(agoShort(r.despedido, now))}</span>` : `<span class="pill dim">gone</span>`;
+    const why = !r.sentado && r.motivoDespido ? `<div class="fw">${esc(r.motivoDespido)}</div>` : '';
+    const file = r.fromLedger ? '' : `<span class="pill dim" title="hired before the ledger started: P&L estimated from its net % on the starting balance">from its file</span>`;
+    return `<button class="frow${r.sentado ? ' sitting' : ''}" type="button" data-open="${esc(r.id)}">` +
+      `<span class="fn">${medal}</span>${avatarSVG(r.id)}` +
+      `<span class="fmain"><span class="fname">${esc(r.nombre)}${r.disparo ? ` <span class="pill pad">${esc(disparoLabel(r.disparo))}</span>` : ''} ${status}${file}</span>` +
+      `<span class="fstats"><span class="${cls(r.pnl)}"><b>${money(r.pnl)}</b></span><span><b>${r.ops ?? '—'}</b> trades</span><span>win <b>${r.ganadas != null ? winRate(r.ganadas, r.ops) : '—'}</b></span><span><b class="${r.rugs ? 'neg' : ''}">${r.rugs ?? '—'}</b> rugs</span><span>best equity <b>${r.mejorEquity != null ? money(r.mejorEquity) : '—'}</b></span><span>hired ${esc(dateShort(r.contratado))}</span></span>${why}</span></button>`;
+  }).join('') + `</div>`;
+}
+
 /* ── the trench: what the desks are scanning ──────────── */
 function safeDot(s) { return `<i class="sdot ${s === true ? 'ok' : s === false ? 'bad' : ''}" title="${s === true ? 'safety check passed' : s === false ? 'flagged by the safety check' : 'not checked yet'}"></i>`; }
 function trowHTML(f, now) {
@@ -588,6 +697,16 @@ function drawShape(ctx, tipo, x, y, r) {
     case 'rebote': ctx.moveTo(x, y + r * 1.15); ctx.lineTo(x + r * 1.1, y - r * 0.85); ctx.lineTo(x - r * 1.1, y - r * 0.85); ctx.closePath(); break;
     case 'nacimiento': {
       for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5; const rr = i % 2 ? r * 0.55 : r * 1.3; const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr; if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py); }
+      ctx.closePath(); break;
+    }
+    case 'devVendio': {   // pentagon
+      for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * Math.PI * 2 / 5; const px = x + Math.cos(a) * r * 1.15, py = y + Math.sin(a) * r * 1.15; if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py); }
+      ctx.closePath(); break;
+    }
+    case 'tuit': {        // plus sign
+      const t = r * 0.42, R = r * 1.2;
+      ctx.moveTo(x - t, y - R); ctx.lineTo(x + t, y - R); ctx.lineTo(x + t, y - t); ctx.lineTo(x + R, y - t); ctx.lineTo(x + R, y + t); ctx.lineTo(x + t, y + t);
+      ctx.lineTo(x + t, y + R); ctx.lineTo(x - t, y + R); ctx.lineTo(x - t, y + t); ctx.lineTo(x - R, y + t); ctx.lineTo(x - R, y - t); ctx.lineTo(x - t, y - t);
       ctx.closePath(); break;
     }
     default: ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -807,6 +926,9 @@ const FEED_TYPES = {
   contratacion: ['hire', 'HIRE'], despido: ['fire', 'FIRE'], apertura: ['open', 'BUY'], ganancia: ['win', 'WIN'],
   perdida: ['loss', 'LOSS'], consejo: ['council', 'COUNCIL'], nacimiento: ['birth', 'BIRTH'], record: ['record', 'RECORD'],
   estancamiento: ['stall', 'STALL'], mutacion: ['mutation', 'MUTATE'], generacion: ['gen', 'GEN'], datos: ['gen', 'DATA'],
+  // the office learning from the hall, the weather, sizing and partial exits
+  aprende: ['learn', '✎ LEARN'], desaprende: ['unlearn', '↶ UNLEARN'], clima: ['weather', '☁ HOUR'], parcial: ['slice', '◔ SLICE'],
+  ascenso: ['up', '▲ SIZE'], descenso: ['down', '▼ SIZE'], maestro: ['teach', '★ TEACH'],
 };
 function renderFeed() {
   const d = S.data; if (!d) return;
@@ -824,6 +946,8 @@ function renderFeed() {
   const html = items.map((f) => {
     let [c, label] = FEED_TYPES[f.tipo] || ['gen', String(f.tipo || '').toUpperCase().slice(0, 7)];
     if (f.tipo === 'perdida' && /\(muerto\)/.test(f.texto || '')) { c = 'rug'; label = '☠ RUG'; }
+    if (f.tipo === 'despido' && /restructuring/i.test(f.texto || '')) { c = 'fire'; label = '⌂ RESTRUCT'; }
+    if (f.tipo === 'aprende' && /confirmed its lesson/i.test(f.texto || '')) { label = '✔ LESSON'; }
     const key = f.t + ':' + f.tipo + ':' + (f.id || '');
     const fresh = !firstRender && !S.feedSeen.has(key);
     let text = f.id ? `<a href="#" data-open="${esc(f.id)}">${esc(f.texto)}</a>` : esc(f.texto);
@@ -957,7 +1081,32 @@ function filterLines(f) {
   if (f.pad && f.pad !== 'cualquiera') out.push(`launchpad: ${padLabel(f.pad)}`);
   if (f.soloGraduados) out.push('graduated only (bonding curve finished)');
   if (f.soloConMarketing) out.push('paid marketing seen');
+  // the dev, X, re-entry and the weather genes (absent on old genomes: nothing is shown)
+  if (f.devGraduo) out.push(`dev graduated a token before (and minted at most ${num(f.devMintsGraduoMax, 0)})`);
+  if (f.devCompraMax != null && f.devCompraMax < 10) out.push(`dev bought ≤ ${num(f.devCompraMax, 1)}% of the supply`);
+  if (f.devVendioMax != null && f.devVendioMax < 100) out.push(`dev has sold ≤ ${num(f.devVendioMax, 0)}% of its bag`);
+  if (f.requiereTuit) out.push('mentioned on X by a watched account');
+  if (f.reentrar === false) out.push('never re-enters a token it already traded');
+  else if (f.reentrar && f.enfriamientoMin) out.push(`re-entry allowed after a ${num(f.enfriamientoMin, 0)} min cooldown`);
+  if (f.horasActivo) out.push(`hours window: only trades ${String(f.horaDesde ?? 0).padStart(2, '0')}:00–${String(f.horaHasta ?? 23).padStart(2, '0')}:59 UTC`);
+  if (f.pulsoMin > 0) out.push(`pulse: only when the trench births ≥ ${num(f.pulsoMin, 0)} tokens a minute`);
+  if (f.solCaidaMax > 0) out.push(`SOL filter: stays out if SOL fell more than ${num(f.solCaidaMax, 1)}% in the last hour`);
   return out;
+}
+function exitLines(s) {
+  const out = [];
+  if (s.escalonado) out.push(`scaling out: sells ${num(s.pctVenta, 0)}% of the bag every ×${num(s.cadaX, 2)}, keeps a ${num(s.moonbag, 0)}% moonbag${s.stopABreakeven ? ' · the stop moves to breakeven after the first slice' : ''}`);
+  out.push(`take profit at ×${num(s.objetivoX, 2)}`, `stop at −${num(s.stopPct, 0)}%`, s.trailingPct ? `trailing stop ${num(s.trailingPct, 0)}% below the high once up 10%` : 'no trailing stop', `at most ${num(s.maxMin, 0)} min inside`);
+  if (s.sinSubida) out.push(`no pump, no stay: out if it has not reached ×${num(s.sinSubidaX, 2)} within ${num(s.sinSubidaMin, 0)} min`);
+  if (s.preGraduacion) out.push(`sells a slice at ${compactUsd(s.preGradMcap)} mcap before graduation (pump.fun only)`);
+  if (s.salirSiDevVende) out.push('leaves the moment the dev sells');
+  if (s.salirSiListosVenden) out.push('leaves when the watched wallets that were buying stop (after 10 min)');
+  return out;
+}
+function convictionBlock(c) {
+  if (!c) return '';
+  if (!c.activa) return `<div class="gblock wide"><b>Conviction</b><span>off — every trade is the desk's standard size</span></div>`;
+  return `<div class="gblock wide conv"><b>Conviction · ALL-IN</b><span>goes <b class="dis-label" style="display:inline">×${num(c.mult, 1)}</b> the usual size, capped at ${num(c.topePct, 0)}% of equity, when ${c.requiereTuit ? 'a watched X account posts it and ' : ''}5-min volume is ≥ ${compactUsd(c.vol5)} with ≥ ${num(c.netos5, 0)} net buyers</span></div>`;
 }
 function genomeBlocks(g) {
   if (!g) return '<div class="notice">Genome not available in this view.</div>';
@@ -967,13 +1116,60 @@ function genomeBlocks(g) {
   }
   const f = g.filtros, d = g.disparo, s = g.salida || {};
   const dis = DISPARO[d.tipo];
-  const exit = [`take profit at ×${num(s.objetivoX, 2)}`, `stop at −${num(s.stopPct, 0)}%`, s.trailingPct ? `trailing stop ${num(s.trailingPct, 0)}% below the high once up 10%` : 'no trailing stop', `at most ${num(s.maxMin, 0)} min inside`];
-  if (s.salirSiListosVenden) exit.push('leaves when the watched wallets that were buying stop (after 10 min)');
   return `<div class="genome">` +
     `<div class="gblock wide"><b>What it looks at</b><ul>${filterLines(f).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` +
     `<div class="gblock"><b>When it buys</b><span class="dis-label">${esc(disparoLabel(d.tipo))}</span><span> — ${esc(dis ? dis.what(d) : d.tipo)}</span></div>` +
-    `<div class="gblock"><b>How it exits</b><ul>${exit.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` +
+    `<div class="gblock"><b>How it exits</b><ul>${exitLines(s).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` +
+    convictionBlock(g.conviccion) +
     `</div>`;
+}
+/* the desk's own hours: trades, P&L and rugs by hour of the day (UTC) */
+function hourOfDayBars(porHora) {
+  const keys = Object.keys(porHora || {});
+  if (!keys.length) return `<div class="notice">No closed trade recorded by hour yet.</div>`;
+  const W = Math.max(320, Math.round(($('modalBox')?.clientWidth || 800) - 52)), H = 120, L = 40, R = 6, T = 12, B = 30;
+  let hi = 0, tot = 0, nOps = 0, nRugs = 0;
+  for (let h = 0; h < 24; h++) { const v = porHora[h] || porHora[String(h)]; if (v) { hi = Math.max(hi, Math.abs(v.pnl || 0)); tot += v.pnl || 0; nOps += v.n || 0; nRugs += v.rugs || 0; } }
+  if (hi <= 0) hi = 1;
+  const y0 = T + (H - T - B) / 2, scale = (H - T - B) / 2 / hi, slot = (W - L - R) / 24, bw = slot * 0.66;
+  const cur = new Date().getUTCHours();
+  let out = `<line class="grid" x1="${L}" x2="${W - R}" y1="${y0.toFixed(1)}" y2="${y0.toFixed(1)}"/>`;
+  out += `<text class="axis" x="${L - 4}" y="${T + 4}" text-anchor="end">${money(hi)}</text><text class="axis" x="${L - 4}" y="${(y0 + 3).toFixed(1)}" text-anchor="end">$0</text><text class="axis" x="${L - 4}" y="${H - B}" text-anchor="end">${money(-hi)}</text>`;
+  let best = null, worst = null;
+  for (let h = 0; h < 24; h++) {
+    const v = porHora[h] || porHora[String(h)];
+    const x = L + slot * h + (slot - bw) / 2;
+    if (h === cur) out += `<rect x="${(x - 2).toFixed(1)}" y="${T - 4}" width="${(bw + 4).toFixed(1)}" height="${H - T - B + 8}" rx="3" fill="none" stroke="#5b8cff" stroke-width="1" stroke-dasharray="3 2"/>`;
+    if (h % 3 === 0) out += `<text class="axis" x="${(x + bw / 2).toFixed(1)}" y="${H - 16}" text-anchor="middle">${String(h).padStart(2, '0')}h</text>`;
+    if (!v) continue;
+    if (!best || v.pnl > best.pnl) best = { h, ...v };
+    if (!worst || v.pnl < worst.pnl) worst = { h, ...v };
+    const hh = Math.abs(v.pnl || 0) * scale;
+    out += `<rect x="${x.toFixed(1)}" y="${(v.pnl >= 0 ? y0 - hh : y0).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, hh).toFixed(1)}" rx="1.5" fill="${v.pnl > 0 ? '#3fbf7f' : v.pnl < 0 ? '#e05260' : '#6b7684'}"><title>${String(h).padStart(2, '0')}:00 UTC · ${esc(money(v.pnl))} · ${v.n} trades · ${v.ganadas || 0} won · ${v.rugs || 0} rugs</title></rect>`;
+    if (v.rugs) out += `<text class="axis" x="${(x + bw / 2).toFixed(1)}" y="${H - 4}" text-anchor="middle" fill="#e05260">☠${v.rugs}</text>`;
+  }
+  return `<div class="hours-chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${out}</svg></div>` +
+    `<div class="loading" style="margin-top:6px">${nOps} closed trade${nOps === 1 ? '' : 's'} across ${keys.length} hour${keys.length === 1 ? '' : 's'} of the day · ${money(tot)} · ${nRugs} rug${nRugs === 1 ? '' : 's'}` +
+    (best && best.pnl > 0 ? ` · best hour <b class="pos">${String(best.h).padStart(2, '0')}:00</b> (${money(best.pnl)})` : '') + (worst && worst.pnl < 0 && worst.h !== best?.h ? ` · worst <b class="neg">${String(worst.h).padStart(2, '0')}:00</b> (${money(worst.pnl)})` : '') + ` · UTC, dashed box = this hour</div>`;
+}
+/* lessons: every time the desk adopted the exits and filters of a better descendant, and the verdict on it */
+function lessonsHTML(a) {
+  const ep = a.epocas || [];
+  if (!ep.length) return '';
+  const ops = a.operaciones || [];
+  const items = ep.slice().reverse().map((e) => {
+    const since = ops.filter((o) => o.tOut >= e.desde).length;
+    let verdict, c;
+    if (e.revertida) { verdict = `unlearned — ${money(e.ahoraPO)} per trade after vs ${money(e.antesPO)} before while the office held: back to its old self`; c = 'bad'; }
+    else if (typeof e.juzgada === 'number') {
+      const fell = e.ahoraPO < e.antesPO - Math.abs(e.antesPO) * 0.3;
+      if (fell && e.oficinaCae) { verdict = `it was the hour — down to ${money(e.ahoraPO)} per trade from ${money(e.antesPO)}, but so was the whole office: it keeps the lesson`; c = 'warn'; }
+      else { verdict = `confirmed — ${money(e.ahoraPO)} per trade after vs ${money(e.antesPO)} before`; c = 'ok'; }
+    } else if (typeof e.juzgada === 'string') { verdict = e.juzgada === 'sin historial previo' ? 'not judged: fewer than 5 trades before the lesson to compare with' : e.juzgada; c = 'dim'; }
+    else { verdict = since >= 10 ? `pending — ${since} trades since; the office judges it on its next round` : `pending — ${since} of the 10 trades needed to judge it`; c = 'dim'; }
+    return `<li class="lesson"><div class="ln"><span class="pill ${c}">${c === 'ok' ? 'confirmed' : c === 'bad' ? 'unlearned' : c === 'warn' ? 'it was the hour' : 'pending'}</span> learned from ${e.deId ? `<a href="#" data-open="${esc(e.deId)}">${esc(e.de || e.deId)}</a>` : esc(e.de || '?')} · ${esc(dateShort(e.desde))} UTC · after trade #${e.opsAntes ?? '?'}</div><div class="lv">${verdict}</div></li>`;
+  }).join('');
+  return `<div><h4>Lessons</h4><ul class="lessons">${items}</ul><div class="loading" style="margin-top:4px">A desk adopts the exits and filters of a descendant that validates better with no more rugs (it keeps its trigger, name, balance and history). After 10 trades the office compares the P&L per trade before and after; if only this desk fell, it unlearns.</div></div>`;
 }
 function metricsTable(tr, va) {
   const trench = (tr && 'muertos' in tr) || (va && 'muertos' in va);
@@ -1001,9 +1197,12 @@ function metricsTable(tr, va) {
 }
 function opsTable(ops) {
   if (!ops || !ops.length) return `<div class="notice">No trades yet at this desk.</div>`;
-  return `<div class="ops-wrap"><table class="ops"><thead><tr><th>token</th><th>in</th><th>out</th><th>P&amp;L</th><th>%</th><th>why</th><th>min</th><th>trigger</th><th>closed</th></tr></thead><tbody>` +
-    ops.slice(0, 40).map((o) => `<tr><td><a href="#" data-token="${esc(o.mint)}">${esc(o.simbolo || shortAddr(o.mint))}</a></td><td>${price(o.entrada)}</td><td>${o.motivo === 'muerto' ? '0' : price(o.salida)}</td><td class="${cls(o.pnl)}">${money(o.pnl)}</td><td class="${cls(o.pct)}">${pct(o.pct, 0)}</td><td>${motivoHTML(o.motivo)}</td><td>${num(o.min, 0)}</td><td>${esc(disparoLabel(o.disparo))}</td><td>${dateShort(o.tOut)}</td></tr>`).join('') +
-    `</tbody></table></div>`;
+  const allIn = ops.filter((o) => o.conviccion).length, sliced = ops.filter((o) => o.parciales > 0).length;
+  const note = (o) => (o.conviccion ? `<span class="pill conv">all-in</span>` : '') + (o.parciales > 0 ? `<span class="pill dim" title="partial sales before the close">${o.parciales} slice${o.parciales > 1 ? 's' : ''}</span>` : '');
+  return `<div class="ops-wrap"><table class="ops"><thead><tr><th>token</th><th>in</th><th>out</th><th>P&amp;L</th><th>%</th><th title="highest multiple seen while inside">high</th><th>why</th><th>min</th><th>trigger</th><th></th><th>closed</th></tr></thead><tbody>` +
+    ops.slice(0, 40).map((o) => `<tr><td><a href="#" data-token="${esc(o.mint)}">${esc(o.simbolo || shortAddr(o.mint))}</a></td><td>${price(o.entrada)}</td><td>${o.motivo === 'muerto' ? '0' : price(o.salida)}</td><td class="${cls(o.pnl)}">${money(o.pnl)}</td><td class="${cls(o.pct)}">${pct(o.pct, 0)}</td><td class="${o.maxX >= 2 ? 'pos' : ''}">${o.maxX ? '×' + num(o.maxX, 2) : '—'}</td><td>${motivoHTML(o.motivo)}</td><td>${num(o.min, 0)}</td><td>${esc(disparoLabel(o.disparo))}</td><td>${note(o)}</td><td>${dateShort(o.tOut)}</td></tr>`).join('') +
+    `</tbody></table></div>` +
+    (allIn || sliced ? `<div class="loading" style="margin-top:4px">${allIn ? `${allIn} all-in trade${allIn === 1 ? '' : 's'} (conviction size)` : ''}${allIn && sliced ? ' · ' : ''}${sliced ? `${sliced} with partial sales on the way up` : ''} · high = the best multiple it saw while inside</div>` : '');
 }
 
 let agentCache = new Map();
@@ -1055,7 +1254,9 @@ async function openAgent(id) {
   const tipo = g?.disparo?.tipo;
   let html = `<div class="modal-head">${avatarSVG(a.id)}<div style="min-width:0"><h3>${esc(a.nombre)}</h3><div class="mh-sub"><span>${esc(a.id)}</span><span>· gen ${gen ?? '?'}</span><span>· ${esc(originLabel(a.origen))}</span>${tipo ? `<span class="pill pad">${esc(disparoLabel(tipo))}</span>` : ''}${where}${estado}</div></div><button class="modal-close" type="button" data-close>×</button></div>`;
   html += `<div class="modal-body">`;
-  html += `<div><h4>Strategy</h4><div class="strategy">${esc(a.descripcion || '—')}</div>${a.motivo ? `<div class="loading" style="margin-top:4px">${esc(a.motivo)}</div>` : ''}</div>`;
+  const sizeNote = a.kind === 'desk' && a.importe != null ? ` · trades $${num(a.importe, 0)} per token${a.aprendido ? ` · learned ${a.aprendido} time${a.aprendido > 1 ? 's' : ''} from the hall` : ''}` : '';
+  html += `<div><h4>Strategy</h4><div class="strategy">${esc(a.descripcion || '—')}</div>${a.motivo || sizeNote ? `<div class="loading" style="margin-top:4px">${esc(a.motivo || '')}${esc(sizeNote)}</div>` : ''}</div>`;
+  html += lessonsHTML(a);
   html += fichaExtraHTML(a, S.data, (pid) => { const m = stateMap().get(pid); return m?.nombre || S.data?.academia?.genealogia?.[pid]?.nombre || null; });
   if (a.kind === 'desk') {
     const inPos = Object.values(a.posiciones || {}).reduce((x, q) => x + (q.importe || 0) + (q.pnlAbierto || 0), 0);
@@ -1071,6 +1272,7 @@ async function openAgent(id) {
       `<div class="loading" style="margin-top:4px">hired ${dateShort(a.contratado)} UTC${a.estado === 'observacion' ? ` · probation day ${a.diasObservacion || 0}${a.diasSinGanar ? ` · ${a.diasSinGanar} day${a.diasSinGanar > 1 ? 's' : ''} without profit` : ''}` : ''}</div>` +
       (Object.keys(a.posiciones || {}).length ? `<div class="desk-pos" style="margin-top:8px">${positionRows(a, true)}</div>` : `<div class="desk-wait">Nothing open · scanning ${liveTokens() != null ? num(liveTokens(), 0) : '?'} live tokens · last buy ${(a.operaciones || [])[0] ? esc(agoShort(a.operaciones[0].tIn)) : 'none yet'}</div>`) + `</div>`;
   }
+  if (a.porHora && Object.keys(a.porHora).length) html += `<div><h4>By hour of the day</h4>${hourOfDayBars(a.porHora)}</div>`;
   if (a.kind === 'fired') {
     html += `<div><h4>Dismissal</h4><div class="rd" style="font:12.5px/1.5 var(--mono);color:var(--text-dim)">net <span class="${cls(a.netoPct)}">${pct(a.netoPct)}</span> · max DD ${num(a.maxDDPct, 1)}% · ${a.operaciones ?? 0} trades · hired ${dateShort(a.contratado)} · fired ${dateShort(a.despedido)}</div></div>`;
   }
@@ -1105,6 +1307,8 @@ function render() {
     return;
   }
   renderOffice();
+  renderHours();
+  renderFame();
   renderTrench();
   renderHall();
   renderHistory();
@@ -1133,7 +1337,7 @@ function init() {
   initOficina({ canvas: $('floorCanvas'), wrap: $('floorWrap'), openAgent, toast });
   $('holdCouncil').addEventListener('click', holdCouncil);
   let resizeTimer = null;
-  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { renderHistory(); if (S.data?.evolucion) drawHall(S.data.evolucion.poblacion || [], new Set((S.data.academia?.puestos || []).filter((p) => p.agente).map((p) => p.agente.id)), S.prevPop || new Set()); }, 150); });
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { renderHistory(); if (S.data) renderHours(); if (S.data?.evolucion) drawHall(S.data.evolucion.poblacion || [], new Set((S.data.academia?.puestos || []).filter((p) => p.agente).map((p) => p.agente.id)), S.prevPop || new Set()); }, 150); });
   renderClock(); setInterval(renderClock, 1000);
   load();
   setInterval(() => { if (!document.hidden) load(); }, REFRESH_MS);

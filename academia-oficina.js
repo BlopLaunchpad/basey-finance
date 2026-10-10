@@ -40,7 +40,7 @@ function fallbackVar(k) {
 }
 
 /* the six ways a trench agent can pull the trigger, in English */
-export const DISPARO_LABEL = { flujo: 'flow reader', listos: 'copycat', momentum: 'chaser', holders: 'community believer', rebote: 'knife catcher', nacimiento: 'trench rat' };
+export const DISPARO_LABEL = { flujo: 'flow reader', listos: 'copycat', momentum: 'chaser', holders: 'community believer', rebote: 'knife catcher', nacimiento: 'trench rat', devVendio: 'dev-dump buyer', tuit: 'tweet chaser' };
 function disparoLabel(t) { return DISPARO_LABEL[t] || t || 'strategy'; }
 function isTrench(a) { return !!(a && a.g && a.g.disparo && a.g.filtros); }
 
@@ -98,6 +98,13 @@ export const TRAITS = {
   paranoid: { label: 'Paranoid', blurb: 'only touches tokens that pass the safety check: no mint authority, no freeze, no tax, not rugged' },
   pumpmaxi: { label: 'Pump maxi', blurb: 'only buys on the bonding curve of pump.fun; graduation is the dream' },
   poolborn: { label: 'Pool purist', blurb: 'only tokens born straight in a pool, no launchpad; thinks curves are for tourists' },
+  devdumper: { label: 'Dev-dump buyer', blurb: 'waits for the dev to sell its bag and buys the panic if the net buyers keep coming' },
+  tweetchaser: { label: 'Tweet chaser', blurb: 'buys when a watched X account posts the contract address; the timeline is its order book' },
+  scaler: { label: 'Scaler', blurb: 'sells slices on the way up and keeps a moonbag; never all out, never all in' },
+  allin: { label: 'All-in', blurb: 'conviction size when volume and net buyers explode: several times the usual bet, capped by equity' },
+  nightowl: { label: 'Clock watcher', blurb: 'only trades inside its hours window (UTC); outside it, tea' },
+  weatherwise: { label: 'Weather-wise', blurb: 'reads the trench pulse and SOL before buying; stays out when the sky is dark' },
+  student: { label: 'Student', blurb: 'has adopted the exits and filters of a better descendant from the hall; the office will judge the lesson' },
 };
 export function personalidad(a) {
   if (!a) return [];
@@ -105,10 +112,14 @@ export function personalidad(a) {
   const keys = [];
   const estado = a.estado || (a.despedido ? 'despedido' : null);
   if (isTrench(a)) {
-    const TYPE = { flujo: 'flowreader', listos: 'copycat', momentum: 'chaser', holders: 'believer', rebote: 'knifecatcher', nacimiento: 'trenchrat' };
+    const TYPE = { flujo: 'flowreader', listos: 'copycat', momentum: 'chaser', holders: 'believer', rebote: 'knifecatcher', nacimiento: 'trenchrat', devVendio: 'devdumper', tuit: 'tweetchaser' };
     if (TYPE[g.disparo.tipo]) keys.push(TYPE[g.disparo.tipo]);
     const s = g.salida || {}, f = g.filtros || {};
+    if (g.conviccion?.activa) keys.push('allin');
+    if (a.aprendido || (a.epocas || []).length) keys.push('student');
+    if (s.escalonado) keys.push('scaler');
     if (s.stopPct >= 55) keys.push('diamondhands'); else if (s.stopPct <= 20) keys.push('paperhands');
+    if (f.horasActivo) keys.push('nightowl'); else if (f.pulsoMin > 0 || f.solCaidaMax > 0) keys.push('weatherwise');
     if (estado === 'observacion') keys.push('nervous'); else if (estado === 'cumple') keys.push('confident'); else if (estado === 'despedido') keys.push('bitter');
     if (s.objetivoX >= 4) keys.push('greedy'); else if (s.maxMin <= 15) keys.push('scalper');
     if (f.requiereSegura) keys.push('paranoid');
@@ -161,7 +172,7 @@ export function habilidades(a) {
     const discipline = (1 - clamp(((s.stopPct ?? 70) - 10) / 60, 0, 1)) * 100;
     const rugDodge = m.operaciones ? (1 - clamp((m.muertos || 0) / m.operaciones, 0, 1)) * 100 : null;
     const f = g.filtros || {};
-    const nFilters = [f.holdersMin > 0, f.organicoMin > 0, f.top10Max < 100, f.requiereSegura, f.lpLockedMin > 0, f.devMintsMax < 200, f.snipersMax < 30, f.pad !== 'cualquiera', f.soloGraduados, f.soloConMarketing].filter(Boolean).length;
+    const nFilters = [f.holdersMin > 0, f.organicoMin > 0, f.top10Max < 100, f.requiereSegura, f.lpLockedMin > 0, f.devMintsMax < 200, f.snipersMax < 30, f.pad !== 'cualquiera', f.soloGraduados, f.soloConMarketing, f.devVendioMax < 100, f.devCompraMax < 10, f.devGraduo, f.requiereTuit, f.horasActivo, f.pulsoMin > 0, f.solCaidaMax > 0].filter(Boolean).length;
     const paranoia = clamp(nFilters / 7, 0, 1) * 100;
     return [
       { key: 'patience', label: 'Patience', v: patience, hint: `holds up to ${s.maxMin ?? '?'} min inside a token` },
@@ -1248,6 +1259,8 @@ function handleFeed(f, now) {
     case 'apertura': if (ag) { say(ag, 'open', { ...vars(ag), ...extra }, f.t); R.blink.set(ag.deskN, now + 3000); } break;
     case 'ganancia': if (ag) { say(ag, 'win', { ...vars(ag), ...extra }, f.t); R.blink.set(ag.deskN, now + 3000); } break;
     case 'perdida': if (ag) { say(ag, /\(muerto\)/.test(txt) ? 'rug' : 'loss', { ...vars(ag), ...extra }, f.t); R.blink.set(ag.deskN, now + 3000); } break;
+    case 'parcial': if (ag) { R.blink.set(ag.deskN, now + 2000); } break;   // a slice sold on the way up: the screen blinks, no speech
+    case 'ascenso': case 'descenso': case 'aprende': case 'desaprende': case 'clima': if (ag) { R.blink.set(ag.deskN, now + 2000); ag.traits = personalidad(ag.data); } break;
     case 'contratacion': if (ag && !R.queue.some((q) => q.id === ag.id)) say(ag, 'hired', vars(ag), f.t); break;
     case 'consejo': for (let i = 0; i < Math.min(2, list.length); i++) { const a = list[(hash('council' + f.t) + i * 7) % list.length]; say(a, 'council', vars(a), f.t); } break;
     case 'record': R.whiteboardFlash = now + 3000; if (list.length) { const a = list[hash('rec' + f.t) % list.length]; say(a, 'record', vars(a), f.t); } break;

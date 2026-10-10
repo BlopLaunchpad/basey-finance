@@ -7,7 +7,7 @@
 <!-- Private tool, same policy as the rest of basey.finance: out of search engines. -->
 <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
 <meta name="googlebot" content="noindex, nofollow">
-<link rel="stylesheet" href="academia.css?v=3">
+<link rel="stylesheet" href="academia.css?v=4">
 </head>
 <body>
 
@@ -49,6 +49,18 @@
         <div class="desks" id="desks"></div>
       </section>
 
+      <section id="hours">
+        <h2>Office hours <span class="sub" id="hoursSub">the ledger, hour by hour</span></h2>
+        <div id="hoursBody"></div>
+        <p class="trench-note">Every hour with a closed trade: the office's realized P&amp;L (bar and number), trades, rugs eaten and win rate, plus the desk that made the most and the one that made the least in that hour. Open P&amp;L is not in here until the position closes. Times in UTC; the dashed box is the hour running now.</p>
+      </section>
+
+      <section id="fame">
+        <h2>Hall of fame <span class="sub" id="fameSub">everyone who sat at a desk</span></h2>
+        <div id="fameBody"></div>
+        <p class="trench-note">Every trader that has passed through the office since the ledger opened, sitting ones included, ranked by realized P&amp;L. <b>sitting</b> = at a desk right now; <b>fired</b> shows when and the reason underneath. Tap a row for the file. A trader marked <b>from its file</b> was hired before the ledger started: its P&amp;L is its net % on the starting balance.</p>
+      </section>
+
       <section id="trench">
         <h2>The Trench <span class="sub" id="trenchSub">what the desks are scanning right now</span></h2>
         <div class="trench-counters" id="trenchCounters"></div>
@@ -72,6 +84,8 @@
             <span><i class="diamond"></i>community believer</span>
             <span><i class="tri-down"></i>knife catcher</span>
             <span><i class="star"></i>trench rat</span>
+            <span><i class="penta"></i>dev-dump buyer</span>
+            <span><i class="plus"></i>tweet chaser</span>
             <span><i class="ring"></i>sitting at a desk</span>
             <span>validation<span class="grad"></span>colour · training = size</span>
           </div>
@@ -129,6 +143,7 @@
 
 <footer>
   <p><b>Score</b> (validation): <code>(min(net %, 300) − max drawdown %) × min(1, trades / 20) when positive − 10 if fewer than 5 trades</code>. The training score is the mean of that over 3 time windows minus half their spread: an agent has to win in every window, not once.</p>
+  <p><b>The desk learns:</b> every day the office looks at each desk's descendants in the hall; if one validates better with no more rugs, the desk adopts its exits and filters (trigger, name, balance and history stay). After 10 trades the office judges the lesson: confirmed, unlearned (only this desk fell), or it was the hour (the whole office fell). Size follows the winner: $5, $10, $20 or $30 per token by equity and trades. ALL-IN = conviction size, several times the usual, when volume and net buyers explode.</p>
   <p><b>Simulated costs:</b> 1.1 % per side on the bonding curve, 0.5 % once graduated or born straight in a pool; slippage by x·y = k against half the pool's liquidity; $0.30 priority per side. A token that stops having liquidity above $1,000 is a rug and whatever is still inside is worth 0. Signals use only what was known at that minute. Nothing here promises profit: the rugs and the fees eat almost everyone. This is an honest measure.</p>
   <p id="footMeta"></p>
 </footer>
@@ -151,6 +166,6 @@
   </defs>
 </svg>
 
-<script type="module" src="academia.js?v=6"></script>
+<script type="module" src="academia.js?v=7"></script>
 </body>
 </html>
