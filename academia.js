@@ -1288,6 +1288,7 @@ function metricsTable(tr, va) {
  * the trade would have cashed: { pnl, usd, pending, error } or null when the engine has not quoted it. */
 function realExit(o) {
   const q = o && o.cotizadas; if (!q || !q.length) return null;
+  if (q.some((c) => c.noCotizable || (c.impactoPct != null && c.impactoPct >= 0.99))) return null; // Meteora DBC curves: Jupiter cannot quote them (impact 100 %); not counted either way
   const err = q.find((c) => c.error);
   const usd = q.reduce((s, c) => s + (c.usd || 0), 0); // a quote that failed (no route: pool already drained) cashes 0
   const importe = o.importe || (o.pct ? Math.abs(o.pnl / o.pct * 100) : 0);
